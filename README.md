@@ -4,6 +4,7 @@ A simple collection of utilities for the purpose of handling and visualizing Kap
 The typical usage is offline analysis outside the simulator [KaSim] (https://github.com/Kappa-Dev/KappaTools).
 
 For the official tools visit [KappaTools] (https://github.com/Kappa-Dev/KappaTools).
+
 See also: https://github.com/hmedina/KaSaAn.
 
 **kappathings.py**
@@ -111,7 +112,7 @@ provides class Snapshot, which reads asnapshot file in JSON format or in Kappa (
 
 provides a rendering of a Kappacomplex through render(), using networkx to do all the work. Again \_\_main\_\_ shows some usage scenarios.
 
-**isomorphism.py**
+**kappamorph.py**
 
 adapts the VF2 graph isomorphism implementation of networkx to Kappa site graphs. It provides a GraphMatcher(G1, G2) class that is initialized with two Kappa expressions G1 and G2. Its is_isomorphic() method returns True if the Kappa expressions are isomorphic. The mapping G1 -> G2 is the dictionary GM.mapping. The is_embeddable() method returns True if G2 is embeddable in G1. The embedding G2 -> G1 (note the direction) is in GM.mapping. The embedding case is most meaningful when G2 is a Kappa pattern. Usage scenarios are in the top-level \_\_main\_\_. For example:
 
