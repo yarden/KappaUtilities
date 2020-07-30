@@ -1,0 +1,27 @@
+// Snapshot [Event: 61499]
+// "uuid" : "893318721"
+%def: "T0" "1"
+
+%init: 1 /*3 agents*/ A(o[1] p[2] t{p}[3]), B(x[1] y[2] z[.]), C(w[3])
+%init: 1 /*9 agents*/ Axin(h[1] t[2]), Axin(h[3] t[1]), Axin(h[4] t[3]),
+  Axin(h[5] t[4]), Axin(h[6] t[5]), Axin(h[7] t[6]), Axin(h[.] t[7]),
+  Axin(h[2] t[8]), Axin(h[8] t[.])
+%init: 6 /*8 agents*/ Axin(h[1] t[.]), Axin(h[2] t[1]), Axin(h[3] t[2]),
+  Axin(h[4] t[3]), Axin(h[5] t[4]), Axin(h[6] t[5]), Axin(h[7] t[6]),
+  Axin(h[.] t[7])
+%init: 11 /*7 agents*/ Axin(h[.] t[1]), Axin(h[1] t[2]), Axin(h[2] t[3]),
+  Axin(h[3] t[4]), Axin(h[4] t[5]), Axin(h[5] t[6]), Axin(h[6] t[.])
+%init: 23 /*6 agents*/ Axin(h[.] t[1]), Axin(h[1] t[2]), Axin(h[2] t[3]),
+  Axin(h[3] t[4]), Axin(h[4] t[5]), Axin(h[5] t[.])
+%init: 1 /*5 agents*/ Axin(h[1] t[2]), Axin(h[3] t[1]), Axin(h[4] t[3]),
+  Axin(h[5] t[4]), Axin(h[2] t[5])
+%init: 81 /*5 agents*/ Axin(h[1] t[2]), Axin(h[3] t[1]), Axin(h[.] t[3]),
+  Axin(h[2] t[4]), Axin(h[4] t[.])
+%init: 253 /*4 agents*/ Axin(h[.] t[1]), Axin(h[1] t[2]), Axin(h[2] t[3]),
+  Axin(h[3] t[.])
+%init: 835 /*3 agents*/ Axin(h[1] t[.]), Axin(h[2] t[1]), Axin(h[.] t[2])
+%init: 6 /*2 agents*/ Axin(h[1] t[2]), Axin(h[2] t[1])
+%init: 2636 /*2 agents*/ Axin(h[1] t[.]), Axin(h[.] t[1])
+%init: 8583 /*1 agents*/ Axin(h[.] t[.])
+
+
