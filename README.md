@@ -117,7 +117,7 @@ provides a rendering of a *Kappacomplex* through render(), using networkx to do 
 
 **kappamorph.py**
 
-provides two approaches to embedding a Kappa pattern graph into a host graph:
+provides two approaches to embedding a Kappa pattern graph G2 into a host graph G1:
 
 * class *SiteGraphMatcher*(G1, G2) exploits the 'rigidity' of site graphs. It is simple and fast.
 * class *GraphMatcher*(G1, G2) adapts the VF2 graph isomorphism implementation of networkx to Kappa site graphs. 
