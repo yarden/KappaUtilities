@@ -1,7 +1,7 @@
 # KappaUtilities
 A simple collection of utilities for the purpose of handling and visualizing Kappa complexes, processing snapshots, determining whether two complexes are isomorphic, and identifying embeddings between a pattern and a host graph.
 
-The typical usage is offline analysis outside the simulator [KaSim] (https://github.com/Kappa-Dev/KappaTools).
+The typical usage is offline analysis of KaSim snapshots (https://github.com/Kappa-Dev/KappaTools).
 
 For the official tools visit [KappaTools] (https://github.com/Kappa-Dev/KappaTools).
 
