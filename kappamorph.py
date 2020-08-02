@@ -560,7 +560,7 @@ class SiteGraphMatcher:
             # the site at which we left the last pattern node to reach the current pattern node
             last_p_node = list(self.stack)[-1]  # peek
             site = self.pattern.navigation[last_p_node][p_node][0]
-            # the agent that is bound on that site but on the host graph
+            # the agent that is bound on that site but in the host graph
             h_node = self.host.agents[h_node][site]['bond'].split(self.pattern.bondsep)[0]
         if not self.node_match(h_node, p_node):
             raise Fail
