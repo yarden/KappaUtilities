@@ -574,29 +574,6 @@ class SiteGraphMatcher:
                     self.match(neighbor, h_node)
             self.stack.pop()
 
-    # def match(self, p_node):
-    #     self.p_visited[p_node] = True
-    #     if self.start:
-    #         self.start = False
-    #         h_node = self.h_start
-    #     else:
-    #         # the site at which we left the last pattern node to reach the current pattern node
-    #         last_p_node = list(self.stack)[-1]  # peek
-    #         site = self.pattern.navigation[last_p_node][p_node][0]
-    #         # the agent that is bound on that site but on the host graph
-    #         h_node = self.host.agents[h_node][site]['bond'].split(self.pattern.bondsep)[0]
-    #     if not self.node_match(h_node, p_node):
-    #         raise Fail
-    #     else:
-    #         # update the mapping
-    #         self.mapping[p_node] = h_node
-    #         # store the last p_node in a stack
-    #         self.stack.append(p_node)
-    #         for neighbor in self.pattern[p_node]:
-    #             if not self.p_visited[neighbor]:
-    #                 self.match(neighbor)
-    #         self.stack.pop()
-
     def node_match(self, h_node, p_node):
         # type match
         h_node_type = self.host.info[h_node]['type']
