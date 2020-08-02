@@ -19,7 +19,7 @@ VF2 references
 
 # The original networkx code was based on work by Christopher Ellison
 
-import sys
+from collections import deque
 
 
 # The graphs are given by the internal representation in 'kappathings.py',
@@ -32,7 +32,38 @@ def print_map(maps):
             print(f'{k} --> {v}')
 
 
-def all_embeddings(host, pattern):
+def all_embeddings(host, pattern, algo='sitegraph'):
+    if algo == 'graph':
+        return graph_embeddings(host, pattern)
+    elif algo == 'sitegraph':
+        return sitegraph_embeddings(host, pattern)
+
+
+def sitegraph_embeddings(host, pattern):
+    rarest_pattern_type = next(iter(pattern.composition))
+    abundance = host.composition[rarest_pattern_type]
+    roots = [node for node in host.name_list if host.info[node]['type'] == rarest_pattern_type]
+
+    mappings = []
+    m = 0
+    for start in roots:
+        GM = SiteGraphMatcher(host, pattern, h_start=start)
+        if GM.embed():
+            # sort sensibly for readability
+            GM.mapping = {k: v for k, v in sorted(GM.mapping.items(), key=lambda x: x[0])}
+            # eliminate identical embeddings
+            found = False
+            for j in range(0, m):
+                if GM.mapping == mappings[j]:
+                    found = True
+                    break
+            if not found:
+                mappings += [GM.mapping]
+                m += 1
+    return mappings
+
+
+def graph_embeddings(host, pattern):
     rarest_pattern_type = next(iter(pattern.composition))
     abundance = host.composition[rarest_pattern_type]
 
@@ -40,7 +71,7 @@ def all_embeddings(host, pattern):
     m = 0
     for i in range(0, abundance):
         GM = GraphMatcher(host, pattern)
-        if GM.is_embeddable():
+        if GM.embed():
             # eliminate identical embeddings
             found = False
             for j in range(0, m):
@@ -60,6 +91,7 @@ def all_embeddings(host, pattern):
 class GraphMatcher:
     """
     Implementation of VF2 algorithm for matching undirected graphs.
+    Does not handle multi-graphs.
     """
 
     def __init__(self, G1, G2):
@@ -69,6 +101,7 @@ class GraphMatcher:
         ----------
         G1,G2: KappaComplex instances.
         The two graphs to check for isomorphism or for an embedding of G2 (pattern) into G1 (host).
+        :param test: either 'embed' (default) or 'iso'
         """
         self.G1 = G1
         self.G2 = G2
@@ -76,31 +109,11 @@ class GraphMatcher:
         self.G2_nodes = set(G2.nodes())
         self.G2_node_order = {n: i for i, n in enumerate(G2.name_list)}
 
-        # Set recursion limit.
-        self.old_recursion_limit = sys.getrecursionlimit()
-        expected_max_recursion_level = len(self.G2)
-        if self.old_recursion_limit < 1.5 * expected_max_recursion_level:
-            # Give some breathing room.
-            sys.setrecursionlimit(int(1.5 * expected_max_recursion_level))
-
         # default: Declare that we will be searching for a graph-graph isomorphism.
-        self.test = 'iso'
+        self.test = None
 
         # Initialize state
         self.initialize()
-
-    def reset_recursion_limit(self):
-        """Restores the recursion limit."""
-        # TODO:
-        # Currently, we use recursion and set the recursion level higher.
-        # It would be nice to restore the level, but because the
-        # (Di)GraphMatcher classes make use of cyclic references, garbage
-        # collection will never happen when we define __del__() to
-        # restore the recursion level. The result is a memory leak.
-        # So for now, we do not automatically restore the recursion level,
-        # and instead provide a method to do this manually. Eventually,
-        # we should turn this into a non-recursive implementation.
-        sys.setrecursionlimit(self.old_recursion_limit)
 
     def initialize(self):
         """Reinitializes the state of the algorithm.
@@ -131,47 +144,38 @@ class GraphMatcher:
         # Provide a convenient way to access the isomorphism mapping.
         self.mapping = self.core_1.copy()
 
-    def is_isomorphic(self):
-        """
-        Returns True if G1 and G2 are isomorphic graphs.
-        The isomorphism is in GM.mapping
-        """
-
-        # Let's do two very quick checks!
-        # QUESTION: Should we call faster_graph_could_be_isomorphic(G1,G2)?
-        # For now, I just copy the code.
-
-        # Check global properties
-        if self.G1.order() != self.G2.order():
-            return False
-        if self.G1.sum_formula != self.G2.sum_formula:
-            return False
-
-        # Check local properties
-        d1 = sorted(d for n, d in self.G1.degree())
-        d2 = sorted(d for n, d in self.G2.degree())
-        if d1 != d2:
-            return False
-
-        try:
-            x = next(self.isomorphisms_iter())
-            return True
-        except StopIteration:
-            return False
-
-    def is_embeddable(self):
+    def embed(self, test='embed'):
         """
         Returns True if G2 can be embedded in G1.
         The embedding is in GM.mapping
+        :param test: 'embed' (default) or 'iso'
         """
 
-        # Check size
-        if self.G1.order() < self.G2.order():
-            return False
-        # Check composition
-        for node_type in G2.composition:
-            if G1.composition[node_type] < G2.composition[node_type]:
+        self.test = test
+
+        if self.test == 'embed':
+            # Check size
+            if self.G1.order() < self.G2.order():
                 return False
+            # Check composition
+            for node_type in self.G2.composition:
+                if self.G1.composition[node_type] < self.G2.composition[node_type]:
+                    return False
+        elif self.test == 'iso':
+            # Check size
+            if self.G1.order() != self.G2.order():
+                return False
+            # Check composition
+            if self.G1.sum_formula != self.G2.sum_formula:
+                return False
+            # Check local properties
+            d1 = sorted(d for n, d in self.G1.degree())
+            d2 = sorted(d for n, d in self.G2.degree())
+            if d1 != d2:
+                return False
+        else:
+            print(f'unknown match request: {self.test}')
+            exit()
 
         try:
             x = next(self.embedding_iter())
@@ -184,24 +188,16 @@ class GraphMatcher:
         except StopIteration:
             return False
 
-    def isomorphisms_iter(self):
-        """Generator over isomorphisms between G1 and G2."""
-        # Declare that we are looking for a graph-graph isomorphism.
-        self.test = 'iso'
-        self.initialize()
-        yield from self.match()
-
     def embedding_iter(self):
-        """Generator over monomorphisms between a subgraph of G1 and G2."""
+        """Generator over embeddings between a subgraph of G1 and G2."""
         # Declare that we are looking for graph-subgraph monomorphism.
-        self.test = 'embed'
         self.initialize()
         yield from self.match()
 
     def match(self):
-        """Extends the isomorphism mapping.
+        """Extends the isomorphism / embedding mapping.
         This function is called recursively to determine if a complete
-        isomorphism can be found between G1 and G2.  It cleans up the class
+        isomorphism / embedding can be found between G1 and G2.  It cleans up the class
         variables after each recursive call. If an isomorphism is found,
         we yield the mapping.
         """
@@ -353,7 +349,7 @@ class GraphMatcher:
         partial isomorphism mapping. The logic should focus on semantic
         information contained in the edge data or a formalized node class.
         By acceptable, we mean that the subsequent mapping can still become a
-        complete isomorphism mapping.
+        complete isomorphism / embedding mapping.
         """
 
         # type match
@@ -391,49 +387,50 @@ class GraphMatcher:
                 if '@' in bond2:
                     partner2, site2 = bond2.split(self.G2.bondsep)
 
-                if self.test == 'iso':
-                    if bond1 != '.' and bond2 != '.':
+                # if self.test == 'iso':
+                #     if bond1 != '.' and bond2 != '.':
+                #         # both sites are bound
+                #         if partner2 in self.core_2:
+                #             if not (self.core_2[partner2] == partner1):
+                #                 return False
+                #         if partner1 in self.core_1:
+                #             if not (self.core_1[partner1] == partner2):
+                #                 return False
+                #         if site1 != site2:
+                #             return False
+                #     elif bond1 != bond2:
+                #         return False  # unless both are '.' (free)
+                # elif self.test == 'embed':  # _, don't care, stub, ., or bond
+
+                if bond2 == '.':
+                    if bond1 != '.':
+                        return False
+                elif '@' in bond2:  # specific bond
+                    if not ('@' in bond1):
+                        return False
+                    else:
                         # both sites are bound
                         if partner2 in self.core_2:
                             if not (self.core_2[partner2] == partner1):
                                 return False
-                        if partner1 in self.core_1:
-                            if not (self.core_1[partner1] == partner2):
-                                return False
                         if site1 != site2:
                             return False
-                    elif bond1 != bond2:
+                elif bond2 == '_':  # unspecific bond
+                    if bond1 == '.':
                         return False
-                elif self.test == 'embed':  # _, don't care, stub, ., or bond
-                    if bond2 == '.':
-                        if bond1 != '.':
+                elif '.' in bond2:  # stub ('.', as in free, is caught above)
+                    if bond1 == '.':  # the site is free
+                        return False
+                    elif bond1 == '_':
+                        return False  # is this True ?? (ask Pierre)
+                    elif '@' in bond1:
+                        ghost_site, ghost_type = bond2.split('.')
+                        type1 = partner1.split('.')[0]
+                        if ghost_type != type1 or ghost_site != site1:
                             return False
-                    elif '@' in bond2:  # specific bond
-                        if not ('@' in bond1):
+                    elif '.' in bond1:  # bond1 is also a stub
+                        if bond2 != bond1:
                             return False
-                        else:
-                            # both sites are bound
-                            if partner2 in self.core_2:
-                                if not (self.core_2[partner2] == partner1):
-                                    return False
-                                if site1 != site2:
-                                    return False
-                    elif bond2 == '_':  # unspecific bond
-                        if bond1 == '.':
-                            return False
-                    elif '.' in bond2:  # stub ('.', as in free, is caught above)
-                        if bond1 == '.':  # the site is free
-                            return False
-                        elif bond1 == '_':
-                            return False  # is this True ?? (ask Pierre)
-                        elif '@' in bond1:
-                            ghost_site, ghost_type = bond2.split('.')
-                            type1 = partner1.split('.')[0]
-                            if ghost_type != type1 or ghost_site != site2:
-                                return False
-                        elif '.' in bond1:  # bond1 is also a stub
-                            if bond2 != bond1:
-                                return False
         return True
 
 
@@ -521,11 +518,160 @@ class GMState:
                     del vector[node]
 
 
+# ================================================================================================
+# The rigid way... (Kappa only)
+# ================================================================================================
+
+class Fail(Exception):
+    pass
+
+
+class SiteGraphMatcher:
+    """
+    Implements graph pattern matching for Kappa exploiting the rigidity of site graphs.
+    Does handle multi-graphs, but not graphs with multiple disconnected components.
+    """
+
+    def __init__(self, host, pattern, h_start=None):
+        self.pattern = pattern
+        self.host = host
+        self.p_visited = {n: False for n in self.pattern.name_list}
+        self.p_start = self.pattern.name_list[0]
+        if not h_start:
+            self.h_start = self.host.name_list[0]
+        else:
+            self.h_start = h_start
+        self.start = True
+        self.stack = deque()
+        self.mapping = {}
+
+    def embed(self):
+        try:
+            self.match(self.p_start, self.h_start)
+            return True
+        except Fail:
+            return False
+
+    def match(self, p_node, h_node):
+        self.p_visited[p_node] = True
+        if self.start:
+            self.start = False
+        else:
+            # the site at which we left the last pattern node to reach the current pattern node
+            last_p_node = list(self.stack)[-1]  # peek
+            site = self.pattern.navigation[last_p_node][p_node][0]
+            # the agent that is bound on that site but on the host graph
+            h_node = self.host.agents[h_node][site]['bond'].split(self.pattern.bondsep)[0]
+        if not self.node_match(h_node, p_node):
+            raise Fail
+        else:
+            # update the mapping
+            self.mapping[p_node] = h_node
+            # store the last p_node
+            self.stack.append(p_node)
+            for neighbor in self.pattern[p_node]:
+                if not self.p_visited[neighbor]:
+                    self.match(neighbor, h_node)
+            self.stack.pop()
+
+    # def match(self, p_node):
+    #     self.p_visited[p_node] = True
+    #     if self.start:
+    #         self.start = False
+    #         h_node = self.h_start
+    #     else:
+    #         # the site at which we left the last pattern node to reach the current pattern node
+    #         last_p_node = list(self.stack)[-1]  # peek
+    #         site = self.pattern.navigation[last_p_node][p_node][0]
+    #         # the agent that is bound on that site but on the host graph
+    #         h_node = self.host.agents[h_node][site]['bond'].split(self.pattern.bondsep)[0]
+    #     if not self.node_match(h_node, p_node):
+    #         raise Fail
+    #     else:
+    #         # update the mapping
+    #         self.mapping[p_node] = h_node
+    #         # store the last p_node in a stack
+    #         self.stack.append(p_node)
+    #         for neighbor in self.pattern[p_node]:
+    #             if not self.p_visited[neighbor]:
+    #                 self.match(neighbor)
+    #         self.stack.pop()
+
+    def node_match(self, h_node, p_node):
+        # type match
+        h_node_type = self.host.info[h_node]['type']
+        p_node_type = self.pattern.info[p_node]['type']
+        if h_node_type != p_node_type:
+            return False
+
+        h_node_iface = self.host.agents[h_node]
+        p_node_iface = self.pattern.agents[p_node]
+
+        for site_name in p_node_iface:
+            if site_name not in h_node_iface:
+                return False
+            else:
+                if p_node_iface[site_name]['state'] != '#':
+                    if p_node_iface[site_name]['state'] != h_node_iface[site_name]['state']:
+                        return False
+
+                h_bond = h_node_iface[site_name]['bond']
+                p_bond = p_node_iface[site_name]['bond']
+                if '@' in h_bond:
+                    h_partner, h_site = h_bond.split(self.host.bondsep)
+                if '@' in p_bond:
+                    p_partner, p_site = p_bond.split(self.pattern.bondsep)
+
+                if p_bond == '.':
+                    if h_bond != '.':
+                        return False
+                elif '@' in p_bond:  # specific bond
+                    if not ('@' in h_bond):
+                        return False
+                    else:
+                        # both sites are bound
+                        if p_partner in self.mapping:
+                            if not (self.mapping[p_partner] == h_partner):
+                                return False
+                        if h_site != p_site:
+                            return False
+                elif p_bond == '_':  # unspecific bond
+                    if h_bond == '.':
+                        return False
+                elif '.' in p_bond:  # stub ('.', as in free, is caught above)
+                    if h_bond == '.':  # the site is free
+                        return False
+                    elif h_bond == '_':
+                        return False  # is this True ?? (ask Pierre)
+                    elif '@' in h_bond:
+                        ghost_site, ghost_type = p_bond.split('.')
+                        h_type = h_partner.split('.')[0]
+                        if ghost_type != h_type or ghost_site != h_site:
+                            return False
+                    elif '.' in h_bond:  # h_bond is also a stub
+                        if p_bond != h_bond:
+                            return False
+        return True
+
+
 if __name__ == '__main__':
     import kappathings as kt
     import re
 
     # usage scenarios
+
+    # G1 = kt.KappaComplex('A(x[1],y[2]), B(x[2],y[3]), C(x[3],y[1]{u})', normalize=False)
+    # G2 = kt.KappaComplex('A(x,y[2]), B(x[2],y[3]), C(x[3])', normalize=False)
+    G1 = kt.KappaComplex('A(b[1] a[2]), A(b[3] a[2]), B(a[1] x{p}), B(a[3] x{u})', normalize=False)
+    G2 = kt.KappaComplex('A(b[2]), B(a[2] x{u})', normalize=False)
+    print(G1.show())
+    print(G2.show())
+    maps = all_embeddings(G1, G2, algo='graph')
+    print(f'number of embeddings of G2 into G1: {len(maps)} ')
+    print_map(maps)
+    maps = all_embeddings(G1, G2, algo='sitegraph')
+    print(f'number of embeddings of G2 into G1: {len(maps)} ')
+    print_map(maps)
 
     # input a file containing one (large) Kappa string
     line = open('TestData/bigly.ka', 'r').read()
@@ -535,8 +681,15 @@ if __name__ == '__main__':
     # (that's the normalize=False flag).
     G1 = kt.KappaComplex(line, normalize=False)
     G2 = kt.KappaComplex(line, normalize=True)
+    print(G2.show())
     GM = GraphMatcher(G1, G2)
-    print(f'G1 and G2 are isomorphic: {GM.is_isomorphic()}')
+    print(f'G1 and G2 are isomorphic: {GM.embed(test="iso")}')
+    map1 = GM.mapping
+    GM = SiteGraphMatcher(G1, G2)
+    print(f'G1 and G2 are isomorphic: {GM.embed()}')
+    map2 = GM.mapping
+    if map1 == map2:
+        print("Great!")
     print_map([GM.mapping])
 
     G1 = kt.KappaComplex('A(x[1],y[2]), B(x[2],y[3]), C(x[3],y[1])', normalize=False)
@@ -544,22 +697,22 @@ if __name__ == '__main__':
         # randomly permute identifiers:
         G2 = kt.KappaComplex('A(x[1],y[2]), B(x[2],y[3]), C(x[3],y[1])', randomize=True)
         GM = GraphMatcher(G1, G2)
-        print(f'G1 and G2 are isomorphic: {GM.is_isomorphic()}')
+        print(f'G1 and G2 are isomorphic: {GM.embed(test="iso")}')
     print('')
 
     G1 = kt.KappaComplex('A(x[1],y[2]), B(x[2],y[3]), C(x[3],y[1])', randomize=True)
     G2 = kt.KappaComplex('A(x[.],y[2]), B(x[2],y[3]), C(x[3],y[.])', normalize=True)
     GM = GraphMatcher(G1, G2)
-    print(f'G1 and G2 are isomorphic: {GM.is_isomorphic()}')
-    print(f'G2 is embeddable in G1: {GM.is_embeddable()}')
+    print(f'G1 and G2 are isomorphic: {GM.embed(test="iso")}')
+    print(f'G2 is embeddable in G1: {GM.embed()}')
 
     G1 = kt.KappaComplex('A(x[1],y[2]), A(x[1],y[3]), C(x[2]), C(x[3]{p})', normalize=False)
     G2 = kt.KappaComplex('A(x[1],y[2]), A(x[1],y[3]), C(x[2]), C(x[3])', normalize=False)
     GM = GraphMatcher(G1, G2)
-    print(f'G2 is embeddable in G1: {GM.is_embeddable()}')
+    print(f'G2 is embeddable in G1: {GM.embed()}')
     G2.name_list = kt.shift(G2.name_list)
     GM = GraphMatcher(G1, G2)
-    print(f'G1 and G2 are isomorphic: {GM.is_isomorphic()}')
+    print(f'G1 and G2 are isomorphic: {GM.embed(test="iso")}')
 
     G1 = kt.KappaComplex('A(x[.] y[2]), A(x[2] y[3]), A(x[3] y[4]), A(x[4] y[1]), B(x[1])')
     G2 = kt.KappaComplex('A(x y[2]), A(x[2] y)')
@@ -573,6 +726,34 @@ if __name__ == '__main__':
 
     G1 = kt.KappaComplex('A(b[1] a[2]), A(b[3] a[2]), B(a[1] x{p}), B(a[3] x{u})')
     G2 = kt.KappaComplex('A(b[2]), B(a[2] x)')
-    maps = all_embeddings(G1, G2)
-    print(f'number of embeddings from G2 into G1: {len(maps)} ')
+    maps = all_embeddings(G1, G2, algo='sitegraph')
+    print(f'number of embeddings of G2 into G1: {len(maps)} ')
+    print_map(maps)
+    #
+    G1 = kt.KappaComplex('A(b[1] a[2]), A(b[1] a[2], c[3]), B(a[3] x[.]{p})')
+    G2 = kt.KappaComplex('A(b[1]), A(b[1])')
+    print(G1.show())
+    print(G2.show())
+    maps = all_embeddings(G1, G2, algo='sitegraph')
+    print(f'number of embeddings of G2 into G1: {len(maps)} ')
+    print_map(maps)
+    maps = all_embeddings(G1, G2, algo='graph')
+    print(f'number of embeddings of G2 into G1: {len(maps)} ')
+    print_map(maps)
+
+    G1 = kt.KappaComplex('A(b[1] a[2]), A(b[3] a[2]), B(a[1] x{p}), B(a[3] x{u})')
+    G2 = kt.KappaComplex('A(a[1]), A(a[1])')
+    print(G1.show())
+    print(G2.show())
+    maps = all_embeddings(G1, G2, algo='sitegraph')
+    print(f'number of embeddings of G2 into G1: {len(maps)} ')
+    print_map(maps)
+    maps = all_embeddings(G1, G2, algo='graph')
+    print(f'number of embeddings of G2 into G1: {len(maps)} ')
+    print_map(maps)
+    #
+    G1 = kt.KappaComplex('A(x[1] y[2]), A(x[2] y[3]), A(x[3] y[4]]), A(x[4] y[1]})')
+    G2 = kt.KappaComplex('A(x[1] y[2]), A(x[2] y[3]), A(x[3] y[4]]), A(x[4] y[1]})')
+    maps = all_embeddings(G1, G2, algo='sitegraph')
+    print(f'number of embeddings of G2 into G1: {len(maps)}')
     print_map(maps)

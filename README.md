@@ -20,8 +20,8 @@ It constructs an internal representation of the form
                                      'degree': int n }
                     self.nxbonds = [ (agent1, agent2, {'sites': site1-site2}) ]
 
- where
-            
+ where everything, except e, is of type string, and 
+  * the interface dictionary of an agent is sorted by site name (needs Python 3.7+)            
   * agent names are unique, consisting of type + identifier, eg Axin.42. (including the last dot), where the right and left separators are dots by default.
   * self.agents is a dictionary keyed by agent name with value a dictionary defining the interface of the agent
   * self.adjacency is a dictionary keyed by agent name and listing the agents bound to the key agent
@@ -73,8 +73,8 @@ line = open('TestData/bigly.ka', 'r').read()
 # remove newlines that might occur in the file
 line = re.sub(r'\n+', ' ', line)
 # create a KappaComplex with whatever assignment of node identifiers arises
-# (that's the normalized=False flag).
-c1 = kt.KappaComplex(line, normalize=True)
+# (that's the normalize=False flag).
+c1 = kt.KappaComplex(line, normalize=False)
 print(c1)
 print("list of nodes:")
 # a list of node names of the complex
@@ -109,15 +109,20 @@ print('')
 
 **kappasnap.py**
 
-provides class Snapshot, which reads asnapshot file in JSON format or in Kappa (.ka) format and converts it into a list self.complex[], which contains the self.number_of_distinct_complexes as *KappaComplex* objects.  Typical usage scenarios are provided in the top-level script environment \_\_main\_\_.
+provides class *Snapshot*, which reads a snapshot file in JSON format or in Kappa (.ka) format and converts it into a list self.complex[], which contains the self.number_of_distinct_complexes as *KappaComplex* objects.  Typical usage scenarios are provided in the top-level script environment \_\_main\_\_.
 
 **kappaviz.py**
 
-provides a rendering of a Kappacomplex through render(), using networkx to do all the work. Again \_\_main\_\_ shows some usage scenarios.
+provides a rendering of a *Kappacomplex* through render(), using networkx to do all the work. Again \_\_main\_\_ shows some usage scenarios.
 
 **kappamorph.py**
 
-adapts the VF2 graph isomorphism implementation of networkx to Kappa site graphs. It provides a GraphMatcher(G1, G2) class that is initialized with two Kappa expressions G1 and G2. Its is_isomorphic() method returns True if the Kappa expressions are isomorphic. The mapping G1 -> G2 is the dictionary GM.mapping. The is_embeddable() method returns True if G2 is embeddable in G1. The embedding G2 -> G1 (note the direction) is in GM.mapping. The embedding case is most meaningful when G2 is a Kappa pattern. Usage scenarios are in the top-level \_\_main\_\_. For example:
+provides two approaches to embedding a Kappa pattern graph into a host graph:
+
+* class *SiteGraphMatcher*(G1, G2) exploits the 'rigidity' of site graphs. It is simple and fast.
+* class *GraphMatcher*(G1, G2) adapts the VF2 graph isomorphism implementation of networkx to Kappa site graphs. 
+
+Both classes are initialized with two Kappa expressions G1 and G2. The mapping G2 -> G1 is the dictionary GM.mapping. Both classes provide an embed() method. In the case of GraphMatcher the embed() method has an optional keyword test; test='iso' (for isomorphism) and test='embed' (default) for embedding. The function all_embeddings(G1, G2, algo='sitegraph'|'graph') yields a list of all embeddings. If G1=G2 then these are, of course, the symmetries of G1. The algo keyword chooses the algorithm, with 'sitegraph' the default. Usage scenarios are in the top-level \_\_main\_\_. For example:
 
 ```Python
 import kappathings as kt
@@ -126,6 +131,18 @@ import kappamorph as km
 G1 = kt.KappaComplex('A(x[1],y[2]), A(x[1],y[3]), C(x[2]), C(x[3]{p})')
 G2 = kt.KappaComplex('A(x[1],y[2]), A(x[1],y[3]), C(x[2]), C(x[3])')
 GM = km.GraphMatcher(G1, G2)
-print(f'G2 is embeddable in G1: {GM.is_embeddable()}')
-print(f'G1 and G2 are isomorphic: {GM.is_isomorphic()}')
+print(f'G2 is embeddable in G1: {GM.embed(test="embed")}')
+print(f'G1 and G2 are isomorphic: {GM.embed(test="iso")}')
+GM = km.SiteGraphMatcher(G1, G2)
+print(f'G2 is embeddable in G1: {GM.embed()}')
+print(f'G1 and G2 are isomorphic: {GM.embed()}')
+
+G1 = kt.KappaComplex('A(b[1] a[2]), A(b[3] a[2]), B(a[1] x{p}), B(a[3] x{u})')
+G2 = kt.KappaComplex('A(b[2]), B(a[2] x)')
+maps = km.all_embeddings(G1, G2, algo="graph")
+print(f'number of embeddings from G2 into G1: {len(maps)}')
+km.print_map(maps)
+maps = km.all_embeddings(G1, G2, algo="sitegraph")
+print(f'number of embeddings from G2 into G1: {len(maps)}')
+km.print_map(maps)
 ```

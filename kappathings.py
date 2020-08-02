@@ -57,7 +57,8 @@ class KappaComplex:
                                      'nbonds': {name: int e}  # e is the number of bonds to node 'name'
                                      'degree': int n }
                     self.nxbonds = [ (agent1, agent2, {'sites': site1-site2}) ]
-            where
+            where everything, except e, is of type string, and
+            * the interface dictionary of an agent is sorted by site name (needs Python 3.7+)
             * agent names are unique, consisting of type + identifier, eg Axin.42. (including the last dot), where
             the right and left separators (dots by default) can be chosen.
             * self.nxbonds is a list of unique tuples: [ (agent1, agent2, {'sites': 'site1-site2'}) ],
@@ -100,6 +101,7 @@ class KappaComplex:
         self.bonds = set()
         self.nxgraph = None
         self.name_list = []
+        self.navigation = {}
 
         # auxiliary variables
         self.counter = 0
@@ -115,12 +117,11 @@ class KappaComplex:
 
         # size
         self.size = len(self.agents)
-        # get the names list (for accessing the agent dictionary in a particular order)
+        # get the names list (for accessing the agent dictionary in a desired order)
         self.name_list = [k for k in self.agents]
-        # # sort name list by type
-        # self.name_list = sorted(self.name_list, key=lambda i: self.info[i]['type'])
         # sort name list by type abundance (primary) and type (secondary); but get first the composition.
         self.get_composition()
+        # sort name list by rarity (primary) and type (secondary)
         self.name_list = sorted(self.name_list,
                                 key=lambda i: (self.composition[self.info[i]['type']], self.info[i]['type']))
 
@@ -136,6 +137,8 @@ class KappaComplex:
         self.make_bond_list()
         # construct adjacency lists
         self.get_adjacency_lists()
+        # assemble the navigation list (for embeddings with kappamorph.py)
+        self.make_navigation_list()
         # get the number of bonds between any two agents
         self.get_bond_numbers()
 
@@ -274,6 +277,8 @@ class KappaComplex:
             try:
                 site_name, state, bond = self.parse_site(item)
                 interface[site_name] = {'state': state, 'bond': bond}
+                # sort interface by key
+                interface = dict(sorted(interface.items()))
             except:
                 exit('Could not parse site ' + item + ' in ' + agent_expression)
 
@@ -323,7 +328,9 @@ class KappaComplex:
                 if self.bondsep in self.agents[name1][s1]['bond']:
                     name2 = self.agents[name1][s1]['bond'].split(self.bondsep)[0]
                     adjacency += [name2]
-            self.adjacency[name1] = adjacency
+            # sort on rarity and type
+            adj = sorted(adjacency, key=lambda i: (self.composition[self.info[i]['type']], self.info[i]['type']))
+            self.adjacency[name1] = adj
 
     def get_bond_numbers(self):  # fuse with adjacency list function ?
         """
@@ -355,6 +362,26 @@ class KappaComplex:
             self.nxbonds += [(a1, a2,
                               {'sites': (self.extract_identifier(a1)[1] + '.' + s1,
                                          self.extract_identifier(a2)[1] + '.' + s2)})]
+
+    def make_navigation_list(self):
+        # self.navigation[a1][a2] contains the sites of a1 that anchor a bond to a2
+        # This is similar to self.bonds, but organized as a dictionary for convenience.
+        self.navigation = {}
+        for (a1, s1), (a2, s2) in self.bonds:  # names a1 and a2 in bonds have id attached
+            if a1 in self.navigation:
+                if a2 in self.navigation[a1]:
+                    self.navigation[a1][a2] += [s1]
+                else:
+                    self.navigation[a1][a2] = [s1]
+            else:
+                self.navigation[a1] = {a2: [s1]}
+            if a2 in self.navigation:
+                if a1 in self.navigation[a2]:
+                    self.navigation[a2][a1] += [s2]
+                else:
+                    self.navigation[a2][a1] = [s2]
+            else:
+                self.navigation[a2] = {a1: [s2]}
 
     def make_agent_names_unique(self, complex):  # complex is in JSON format
         """
@@ -594,18 +621,29 @@ if __name__ == '__main__':
 
     print("from JSON:")
     # input a JSON string of the same complex as above
-    data = '[{"node_type":"A","node_sites":[{"site_name":"o","site_type":["port",{"port_links":[[[0,1],0]],"port_states":[]}]},{"site_name":"p","site_type":["port",{"port_links":[[[0,1],1]],"port_states":[]}]},{"site_name":"t","site_type":["port",{"port_links":[[[0,2],0]],"port_states":["p"]}]}]},{"node_type":"B","node_sites":[{"site_name":"x","site_type":["port",{"port_links":[[[0,0],0]],"port_states":[]}]},{"site_name":"y","site_type":["port",{"port_links":[[[0,0],1]],"port_states":[]}]},{"site_name":"z","site_type":["port",{"port_links":[],"port_states":[]}]}]},{"node_type":"C","node_sites":[{"site_name":"w","site_type":["port",{"port_links":[[[0,0],2]],"port_states":[]}]}]}]'
+    data = '[{"node_type":"A","node_sites":[{"site_name":"o","site_type":["port",{"port_links":[[[0,1],0]],' \
+           '"port_states":[]}]},{"site_name":"p","site_type":["port",{"port_links":[[[0,1],1]],"port_states":[]}]},' \
+           '{"site_name":"t","site_type":["port",{"port_links":[[[0,2],0]],"port_states":["p"]}]}]},' \
+           '{"node_type":"B","node_sites":[{"site_name":"x","site_type":["port",{"port_links":[[[0,0],0]],' \
+           '"port_states":[]}]},{"site_name":"y","site_type":["port",{"port_links":[[[0,0],1]],' \
+           '"port_states":[]}]},{"site_name":"z","site_type":["port",{"port_links":[],"port_states":[]}]}]},' \
+           '{"node_type":"C","node_sites":[{"site_name":"w","site_type":["port",{"port_links":[[[0,0],2]],' \
+           '"port_states":[]}]}]}]'
     c = KappaComplex(data)
     print(c)
-
+    print('navigation...')
+    for i in c.navigation:
+        for j in c.navigation[i]:
+            print(f'from {i} to {j} via {c.navigation[i][j]}')
+    #
     print("from file:")
     # input a file containing one (large) Kappa string
     line = open('TestData/bigly.ka', 'r').read()
     # remove newlines that might occur in the file
     line = re.sub(r'\n+', ' ', line)
     # create a KappaComplex with whatever assignment of node identifiers arises
-    # (that's the normalized=False flag).
-    c1 = KappaComplex(line, normalize=True)
+    # (that's the normalize=False flag).
+    c1 = KappaComplex(line, normalize=False)
     print(c1)
     print("list of nodes:")
     # a list of node names of the complex
@@ -616,7 +654,7 @@ if __name__ == '__main__':
     for n in c1:
         print(f'adjacency of {n}: {c1[n]}')
     print('')
-
+    #
     print("normalize identifiers:")
     # "normalize" the identifiers, which means: when node types are sorted lexicographically,
     # nodes are assigned successively increasing identifiers.
