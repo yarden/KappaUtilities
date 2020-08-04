@@ -38,7 +38,7 @@ def render(komplex, prog='neato', node_size=400, font_size=11, labels=True, pdf=
     i = 0
     # fill palette in order of (descending) frequency
     for node in komplex.composition.keys():
-        clr[node] = palette[i]
+        clr[node] = palette[i % 8]
         i += 1
     # fill color list
     for node in nxgraph.nodes:

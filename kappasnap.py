@@ -8,11 +8,17 @@ import os
 
 class SnapShot:
     """
-    Read a snapshot from file and generate internal representations of complexes.
+    Provides class Snapshot.
+    Read a snapshot from a JSON or .ka file and generate internal representations of complexes.
     The complexes are stored as a list self.complex[] of objects of the kappathings.KappaComplex class.
 
-    Supported file extensions: json and ka.
+    Basic usage:
+        snapshot = SnapShot('TestData/snap.ka')
+        print(f'{snapshot.number_of_distinct_complexes} complexes')
+        for c in snapshot.complex:
+            print(c)
     """
+
     def __init__(self, file):
         self.file = file
         self.time = 0.
@@ -80,7 +86,9 @@ class KappaSnapShot:
                     entry = self.next_complex_from_file()
                     if not entry:
                         break
+                    # parse the entry
                     match = re.findall(r'%init: (.*?) \/\*(.*?) agents\*\/ (.*?)$', entry)[0]
+                    # build the internal representation
                     komplex = kt.KappaComplex(match[2].strip(), count=int(match[0]))
                     self.complex.append(komplex)
             self.number_of_distinct_complexes = len(self.complex)
@@ -193,10 +201,14 @@ class JsonSnapShot:
             komplex = kt.KappaComplex(c[1][0], count=c[0])
             self.complex.append(komplex)
 
+
 # -----------------------------------------------------------------
 
 
 if __name__ == '__main__':
+
+    import kappamorph as km
+    import kappaviz as viz
 
     # usage scenarios
 

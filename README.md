@@ -135,7 +135,6 @@ print(f'G2 is embeddable in G1: {GM.embed(test="embed")}')
 print(f'G1 and G2 are isomorphic: {GM.embed(test="iso")}')
 GM = km.SiteGraphMatcher(G1, G2)
 print(f'G2 is embeddable in G1: {GM.embed()}')
-print(f'G1 and G2 are isomorphic: {GM.embed()}')
 
 G1 = kt.KappaComplex('A(b[1] a[2]), A(b[3] a[2]), B(a[1] x{p}), B(a[3] x{u})')
 G2 = kt.KappaComplex('A(b[2]), B(a[2] x)')
