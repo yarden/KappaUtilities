@@ -5,22 +5,6 @@ import random
 import networkx as nx
 
 
-def is_multigraph(bonds):
-    """
-    Test if the set of bonds implies a multigraph.
-
-    :param: bonds is a list of unique tuples: [ ( (agent1, site1), (agent2, site2) ) ]
-    :return: True / False
-    """
-    s = []
-    for a1, a2, meta in bonds:
-        if {a1, a2} in s:
-            return True
-        else:
-            s += [{a1, a2}]
-    return False
-
-
 def is_number(s):
     try:
         float(s)
@@ -36,10 +20,6 @@ def shift(in_list, n=1):
     for i in range(0, n):
         new_list += [in_list[i]]
     return new_list
-
-
-class LeaveLoop(Exception):
-    pass
 
 
 class KappaComplex:
@@ -106,6 +86,21 @@ class KappaComplex:
         # auxiliary variables
         self.counter = 0
         self.next = 0
+
+        # build regex'es
+        site_name_re = r'(' + self.symbols + r')'
+        internal_state_re = r'({(?:' + self.symbols + r'|[#]' + r')})'
+        # binding_id_re = r'(\[(?:.|\d+)\])'
+        binding_re = r'(\[(?:.*)\])'  # we still need to parse the bond expression
+        # this can be . | # | number | site.agent (a stub)
+        self.binding_state_re = r'^' + r'(?:\.|_|#|\d+)' + r'|(?:' + self.symbols + r')\.(?:' + self.symbols + r')'
+        # using optional lookahead, since the internal state is optional and there is no prescribed order.
+        # (gobble up the string with .*)
+        self.site_re = r'^' + site_name_re + r'(?=.*' + internal_state_re + r')?' + r'(?=.*' + binding_re + r')?.*'
+
+        agent_name_re = r'(' + self.symbols + r')'
+        agent_interface_re = r'\(([^()]*)\)'
+        self.agent_re = r'^' + agent_name_re + agent_interface_re + r'$'
 
         # produce an internal representation of the complex from json or kappa
         if data:
@@ -209,58 +204,39 @@ class KappaComplex:
 
     def stubbify_bonds(self):
         """
-        replace the bond labels with unique bond stubs
+        replace numeric bond labels with unique bond stubs
+        generate the set self.bonds
         """
         # If we are dealing with an object that contains a bond pattern, the degree of a node has no meaning.
-        # The degree is used only for isomorphism checking, but not for pattern embeddings.
+        # The degree is used only for VF2 isomorphism checking, but not for pattern embeddings.
         self.bonds = set()
-        name_list = [k for k in self.agents]  # temporary
-        resolved = True
-        size = len(name_list)
-        for i in range(0, size):
+        bonds = {}
+        for name in self.agents:
             degree = 0
-            name1 = name_list[i]
-            iface1 = self.agents[name1]
-            for site1 in iface1:
-                if iface1[site1]['bond'] != '.':
-                    if is_number(iface1[site1]['bond']):
+            for site in self.agents[name]:
+                link = self.agents[name][site]['bond']
+                if link != '.':
+                    if is_number(link):
                         degree += 1
-                        resolved = False
-                        try:
-                            for j in range(i + 1, size):
-                                name2 = name_list[j]
-                                iface2 = self.agents[name2]
-                                for site2 in iface2:
-                                    if iface1[site1]['bond'] == iface2[site2]['bond']:
-                                        resolved = True
-                                        iface1[site1]['bond'] = name2 + self.bondsep + site2
-                                        iface2[site2]['bond'] = name1 + self.bondsep + site1
-                                        b = sorted([(name1, site1), (name2, site2)], key=lambda i: i[0])
-                                        self.bonds.add(tuple(b))  # collect unique bonds
-                                        raise LeaveLoop
-                        except LeaveLoop:
-                            pass
-                    elif self.bondsep in iface1[site1]['bond']:
+                        if link in bonds:
+                            [(name1, site1)] = bonds[link]
+                            self.agents[name1][site1]['bond'] = name + self.bondsep + site
+                            self.agents[name][site]['bond'] = name1 + self.bondsep + site1
+                            b = sorted([(name1, site1), (name, site)], key=lambda i: i[0])
+                            self.bonds.add(tuple(b))  # collect unique bonds
+                        else:
+                            bonds[link] = [(name, site)]
+                    elif self.bondsep in self.agents[name][site]['bond']:
                         degree += 1
                     else:
                         # bond state is a stub or '_' or '#'
                         degree = -1  # reset and flag, just in case
                         self.is_pattern = True
 
-            self.info[name1]['degree'] = degree
-
-        if not resolved:
-            raise Exception('malformed complex: unresolved bonds')
+            self.info[name]['degree'] = degree
 
     def parse_agent(self, agent_expression):
-        """
-        Note: For now this only parses agent expressions in a mixture
-        """
-        agent_name_re = r'(' + self.symbols + r')'
-        agent_interface_re = r'\(([^()]*)\)'
-        agent_re = r'^' + agent_name_re + agent_interface_re + r'$'
-
-        match = re.match(agent_re, agent_expression)
+        match = re.match(self.agent_re, agent_expression)
         if not match:
             exit('Invalid agent declaration <' + agent_expression + '>')
         agent_type = match.group(1)
@@ -278,25 +254,14 @@ class KappaComplex:
                 site_name, state, bond = self.parse_site(item)
                 interface[site_name] = {'state': state, 'bond': bond}
                 # sort interface by key
-                interface = dict(sorted(interface.items()))
+                # interface = dict(sorted(interface.items()))
             except:
                 exit('Could not parse site ' + item + ' in ' + agent_expression)
 
         return agent_type, identifier, interface
 
     def parse_site(self, site_expression):
-        # build regex'es
-        site_name_re = r'(' + self.symbols + r')'
-        internal_state_re = r'({(?:' + self.symbols + r'|[#]' + r')})'
-        # binding_id_re = r'(\[(?:.|\d+)\])'
-        binding_re = r'(\[(?:.*)\])'  # we still need to parse the bond expression
-        # this can be . | # | number | site.agent (a stub)
-        binding_state_re = r'^' + r'(?:\.|_|#|\d+)' + r'|(?:' + self.symbols + r')\.(?:' + self.symbols + r')'
-        # using optional lookahead, since the internal state is optional and there is no prescribed order.
-        # (gobble up the string with .*)
-        site_re = r'^' + site_name_re + r'(?=.*' + internal_state_re + r')?' + r'(?=.*' + binding_re + r')?.*'
-
-        match = re.match(site_re, site_expression)
+        match = re.match(self.site_re, site_expression)
         if not match:
             exit('Could not parse site ' + site_expression)
         # return site name, internal state and binding state (without parentheses)
@@ -309,7 +274,7 @@ class KappaComplex:
         binding_state = '#'  # don't care (absent) by default
         if match.group(3):  # there is an explicit binding state
             binding_expression = match.group(3)[1:-1]  # remove parens
-            match = re.match(binding_state_re, binding_expression)  # continue parsing
+            match = re.match(self.binding_state_re, binding_expression)  # continue parsing
             if match:
                 binding_state = match.group(0)  # either '.' or '#' or number or stub
                 # warning: if the site name starts with '_' we have a problem; fix later...
@@ -364,24 +329,13 @@ class KappaComplex:
                                          self.extract_identifier(a2)[1] + '.' + s2)})]
 
     def make_navigation_list(self):
-        # self.navigation[a1][a2] contains the sites of a1 that anchor a bond to a2
+        # self.navigation[a1][a2] contains a site of a1 that anchors a bond to a2
+        # (For the purpose of this array, we don't care about multiple bonds between the same agents.)
         # This is similar to self.bonds, but organized as a dictionary for convenience.
         self.navigation = {}
         for (a1, s1), (a2, s2) in self.bonds:  # names a1 and a2 in bonds have id attached
-            if a1 in self.navigation:
-                if a2 in self.navigation[a1]:
-                    self.navigation[a1][a2] += [s1]
-                else:
-                    self.navigation[a1][a2] = [s1]
-            else:
-                self.navigation[a1] = {a2: [s1]}
-            if a2 in self.navigation:
-                if a1 in self.navigation[a2]:
-                    self.navigation[a2][a1] += [s2]
-                else:
-                    self.navigation[a2][a1] = [s2]
-            else:
-                self.navigation[a2] = {a1: [s2]}
+            self.navigation[(a1, a2)] = s1
+            self.navigation[(a2, a1)] = s2
 
     def make_agent_names_unique(self, complex):  # complex is in JSON format
         """
@@ -418,8 +372,9 @@ class KappaComplex:
 
     def permute_ids(self, permute):
         """
-        nodes must be lexicographically sorted by name; here, we (re)assign identifiers according to
+        We (re)assign identifiers according to
         :param permute
+        Note: nodes must be lexicographically sorted by name.
         """
         self.bonds = set()  # reset
         self.nxgraph = None  # reset
@@ -471,6 +426,19 @@ class KappaComplex:
         for type in self.composition.keys():
             self.sum_formula += (type + '{' + str(self.composition[type]) + '}')
 
+    def is_multigraph(self):
+        """
+        Test if the set of bonds implies a multigraph.
+        :return: True / False
+        """
+        s = []
+        for a1, a2, meta in self.nxbonds:
+            if {a1, a2} in s:
+                return True
+            else:
+                s += [{a1, a2}]
+        return False
+
     def get_nxgraph_from_structure(self):
         """
         Note: update this to handle patterns!
@@ -482,10 +450,11 @@ class KappaComplex:
             name = next(iter(self.agents))
             G.add_node(name)
         else:
-            if is_multigraph(self.nxbonds):
-                G = nx.MultiGraph()
-            else:
-                G = nx.Graph()
+            G = nx.MultiGraph()
+            # if self.is_multigraph():
+            #     G = nx.MultiGraph()
+            # else:
+            #     G = nx.Graph()
             G.add_edges_from(self.nxbonds)
 
         # set identifier as node attribute 'id'
@@ -498,7 +467,7 @@ class KappaComplex:
 
     def nodes(self):
         """
-        This emulates the networkx' G.nodes() method returning a hashable list of node names.
+        This emulates the networkx' G.nodes() method returning a list of node names.
         """
         # return [k for k in self.agents]
         return self.name_list
