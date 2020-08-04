@@ -60,7 +60,7 @@ class KappaComplex:
             optionally self.nxgraph using method get_nxgraph_from_structure()
     """
 
-    def __init__(self, data, count=0, normalize=True, randomize=False):
+    def __init__(self, data, count=0, normalize=False, randomize=False):
         # change these defs only if you know what you are doing
         self.symbols = r'[_~][a-zA-Z0-9_~+-]+|[a-zA-Z][a-zA-Z0-9_~+-]*'
         self.bondsep = '@'
@@ -132,10 +132,11 @@ class KappaComplex:
         self.make_bond_list()
         # construct adjacency lists
         self.get_adjacency_lists()
-        # assemble the navigation list (for embeddings with kappamorph.py)
+        # assemble the navigation list (for rigid embeddings with kappamorph.py)
         self.make_navigation_list()
-        # get the number of bonds between any two agents
-        self.get_bond_numbers()
+        # get the number of bonds between any two agents;
+        # this is only needed when using VF2 for pattern matching
+        # self.get_bond_numbers()
 
     def get_structure_from_json(self, data):
         """
@@ -572,12 +573,14 @@ class KappaComplex:
 
 if __name__ == '__main__':
 
+    import time
+
     # usage scenarios
 
     print("from Kappa:")
     # input a simple Kappa string to create the KappaComplex representation
     data = ' A(o[1], p[2] t{p}[3]), B(x[1] y[2] z[.]), C(w[3], y[z.B])'
-    c = KappaComplex(data, count=175)
+    c = KappaComplex(data, count=175, normalize=True)
     # print it
     print(c)
     # short version
@@ -598,7 +601,7 @@ if __name__ == '__main__':
            '"port_states":[]}]},{"site_name":"z","site_type":["port",{"port_links":[],"port_states":[]}]}]},' \
            '{"node_type":"C","node_sites":[{"site_name":"w","site_type":["port",{"port_links":[[[0,0],2]],' \
            '"port_states":[]}]}]}]'
-    c = KappaComplex(data)
+    c = KappaComplex(data, normalize=True)
     print(c)
     print('navigation...')
     for i in c.navigation:
@@ -612,7 +615,7 @@ if __name__ == '__main__':
     line = re.sub(r'\n+', ' ', line)
     # create a KappaComplex with whatever assignment of node identifiers arises
     # (that's the normalize=False flag).
-    c1 = KappaComplex(line, normalize=False)
+    c1 = KappaComplex(line)
     print(c1)
     print("list of nodes:")
     # a list of node names of the complex
@@ -643,3 +646,11 @@ if __name__ == '__main__':
     # testing __iter__ and __getitem__ methods
     for n in c3:
         print(f'adjacency of {n}: {c3[n]}')
+
+    print("big stuff from file:")
+    line = open('TestData/monster.ka', 'r').read()
+    line = re.sub(r'\n+', ' ', line)
+    start = time.process_time()
+    c1 = KappaComplex(line)
+    end = time.process_time()
+    print(f'seconds: {end - start}')
