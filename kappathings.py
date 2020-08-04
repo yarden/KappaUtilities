@@ -603,10 +603,6 @@ if __name__ == '__main__':
            '"port_states":[]}]}]}]'
     c = KappaComplex(data, normalize=True)
     print(c)
-    print('navigation...')
-    for i in c.navigation:
-        for j in c.navigation[i]:
-            print(f'from {i} to {j} via {c.navigation[i][j]}')
     #
     print("from file:")
     # input a file containing one (large) Kappa string
