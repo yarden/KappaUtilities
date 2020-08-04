@@ -20,6 +20,7 @@ VF2 references
 # The original networkx code was based on work by Christopher Ellison
 
 from collections import deque
+import sys
 
 
 # The graphs are given by the internal representation in 'kappathings.py',
@@ -33,10 +34,21 @@ def print_map(maps):
 
 
 def all_embeddings(host, pattern, algo='sitegraph'):
+    # set recursion limit.
+    old_recursion_limit = sys.getrecursionlimit()
+    expected_max_recursion_level = pattern.size
+    if old_recursion_limit < 1.5 * expected_max_recursion_level:
+        # Give some breathing room.
+        sys.setrecursionlimit(int(1.5 * expected_max_recursion_level))
+
     if algo == 'graph':
-        return graph_embeddings(host, pattern)
+        m = graph_embeddings(host, pattern)
     elif algo == 'sitegraph':
-        return sitegraph_embeddings(host, pattern)
+        m = sitegraph_embeddings(host, pattern)
+
+    # restore recursion limit.
+    sys.setrecursionlimit(old_recursion_limit)
+    return m
 
 
 def sitegraph_embeddings(host, pattern):
@@ -45,21 +57,13 @@ def sitegraph_embeddings(host, pattern):
     roots = [node for node in host.name_list if host.info[node]['type'] == rarest_pattern_type]
 
     mappings = []
-    m = 0
     for start in roots:
         GM = SiteGraphMatcher(host, pattern, h_start=start)
         if GM.embed():
             # sort sensibly for readability
             GM.mapping = {k: v for k, v in sorted(GM.mapping.items(), key=lambda x: x[0])}
-            # eliminate identical embeddings
-            found = False
-            for j in range(0, m):
-                if GM.mapping == mappings[j]:
-                    found = True
-                    break
-            if not found:
-                mappings += [GM.mapping]
-                m += 1
+            # the rigidity approach never produces identical embeddings
+            mappings += [GM.mapping]
     return mappings
 
 
@@ -75,7 +79,7 @@ def graph_embeddings(host, pattern):
             # eliminate identical embeddings
             found = False
             for j in range(0, m):
-                if GM.mapping == mappings[j]:
+                if GM.mapping == mappings[j]:  # not the fastest way...
                     found = True
                     break
             if not found:
@@ -177,16 +181,31 @@ class GraphMatcher:
             print(f'unknown match request: {self.test}')
             exit()
 
+        # set recursion limit.
+        old_recursion_limit = sys.getrecursionlimit()
+        expected_max_recursion_level = self.G2.size
+        if old_recursion_limit < 1.5 * expected_max_recursion_level:
+            # Give some breathing room.
+            sys.setrecursionlimit(int(1.5 * expected_max_recursion_level))
+
         try:
             x = next(self.embedding_iter())
             # invert the mapping for more natural reading
+            flag = True
+        except StopIteration:
+            flag = False
+
+        if flag:
+            # invert, so we go G2->G1 (pattern->host)
             m = {}
             for k, v in self.mapping.items():
                 m[v] = k
             self.mapping = m
-            return True
-        except StopIteration:
-            return False
+
+        # restore recursion limit.
+        sys.setrecursionlimit(old_recursion_limit)
+
+        return flag
 
     def embedding_iter(self):
         """Generator over embeddings between a subgraph of G1 and G2."""
@@ -535,44 +554,53 @@ class SiteGraphMatcher:
     def __init__(self, host, pattern, h_start=None):
         self.pattern = pattern
         self.host = host
-        self.p_visited = {n: False for n in self.pattern.name_list}
         self.p_start = self.pattern.name_list[0]
         if not h_start:
             self.h_start = self.host.name_list[0]
         else:
             self.h_start = h_start
-        self.start = True
-        self.stack = deque()
         self.mapping = {}
 
     def embed(self):
+        # set recursion limit.
+        old_recursion_limit = sys.getrecursionlimit()
+        expected_max_recursion_level = len(self.pattern)
+        if old_recursion_limit < 1.5 * expected_max_recursion_level:
+            # Give some breathing room.
+            sys.setrecursionlimit(int(1.5 * expected_max_recursion_level))
+
         try:
             self.match(self.p_start, self.h_start)
-            return True
+            flag = True
         except Fail:
-            return False
+            flag = False
+
+        # restore recursion limit.
+        sys.setrecursionlimit(old_recursion_limit)
+
+        return flag
 
     def match(self, p_node, h_node):
-        self.p_visited[p_node] = True
-        if self.start:
-            self.start = False
-        else:
-            # the site at which we left the last pattern node to reach the current pattern node
-            last_p_node = list(self.stack)[-1]  # peek
-            site = self.pattern.navigation[last_p_node][p_node][0]
-            # the agent that is bound on that site but in the host graph
-            h_node = self.host.agents[h_node][site]['bond'].split(self.pattern.bondsep)[0]
-        if not self.node_match(h_node, p_node):
-            raise Fail
-        else:
-            # update the mapping
-            self.mapping[p_node] = h_node
-            # store the last p_node
-            self.stack.append(p_node)
-            for neighbor in self.pattern[p_node]:
-                if not self.p_visited[neighbor]:
-                    self.match(neighbor, h_node)
-            self.stack.pop()
+        stack = deque()
+        visited = set()
+        stack.append((p_node, '', h_node))  # (start node, predecessor)
+        while stack:
+            p_node, parent_p_node, h_node = stack.pop()
+            if p_node not in visited:
+                if parent_p_node:
+                    # the site at which we left the last pattern node to reach the current pattern node
+                    site = self.pattern.navigation[(parent_p_node, p_node)]
+                    # the agent that is bound on that site but in the host graph
+                    h_node = self.host.agents[h_node][site]['bond'].split(self.pattern.bondsep)[0]
+                if self.node_match(h_node, p_node):
+                    # update the mapping
+                    self.mapping[p_node] = h_node
+                    visited.add(p_node)
+                    for neighbor in self.pattern[p_node]:
+                        # stack the neighbors
+                        stack.append((neighbor, p_node, h_node))
+                else:
+                    raise Fail
 
     def node_match(self, h_node, p_node):
         # type match
