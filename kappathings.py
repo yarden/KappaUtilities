@@ -34,15 +34,14 @@ class KappaComplex:
             self.adjacency[name] = [ agent_names ]
                  self.info[name] = { 'id': identifier
                                      'type': agent_type
-                                     'nbonds': {name: int e}  # e is the number of bonds to node 'name'
                                      'degree': int n }
-                    self.nxbonds = [ (agent1, agent2, {'sites': site1-site2}) ]
+                    self.bonds   = { (agent1, site1), (agent2, site2) }  # a set
             where everything, except e, is of type string, and
             * the interface dictionary of an agent is sorted by site name (needs Python 3.7+)
             * agent names are unique, consisting of type + identifier, eg Axin.42. (including the last dot), where
             the right and left separators (dots by default) can be chosen.
-            * self.nxbonds is a list of unique tuples: [ (agent1, agent2, {'sites': 'site1-site2'}) ],
-            lexicographically sorted on agent. It is used to make a networkx graph for the purpose of visualization.
+            * self.bonds is a list of unique tuples: (agent1, site1), (agent2, site2), lexicographically sorted
+            on agent.
             * bonds are stubs of the form name@site indicating the name of the agent and site
             that anchors the other end of the bond
             * self.name_list is a list of agent names for the purpose of "sorting" the agent dictionary self.agents.
@@ -77,9 +76,9 @@ class KappaComplex:
         self.agents = {}
         self.adjacency = {}
         self.info = {}
-        self.nxbonds = []
         self.bonds = set()
         self.nxgraph = None
+        self.nbonds = {}   # nbonds[(a1, a2)] = n of bonds between a1 and a2 for a1 <= a2
         self.name_list = []
         self.navigation = {}
 
@@ -128,15 +127,10 @@ class KappaComplex:
             # agent list will be lexicographically sorted /and has increasing identifier/
             self.permute_ids(self.normalize_ids())  # this also makes the bond list
 
-        # format bond list for nx metadata
-        self.make_bond_list()
         # construct adjacency lists
         self.get_adjacency_lists()
         # assemble the navigation list (for rigid embeddings with kappamorph.py)
         self.make_navigation_list()
-        # get the number of bonds between any two agents;
-        # this is only needed when using VF2 for pattern matching
-        # self.get_bond_numbers()
 
     def get_structure_from_json(self, data):
         """
@@ -177,7 +171,7 @@ class KappaComplex:
                     state = state_[0]
                 interface[site_name] = {'state': state, 'bond': bond}
             self.agents[agent_name] = interface
-            self.info[agent_name] = {'id': identifier, 'type': agent_type, 'nbonds': {}, 'degree': degree}
+            self.info[agent_name] = {'id': identifier, 'type': agent_type, 'degree': degree}
 
     def get_structure_from_kappa(self, data):
         """
@@ -198,7 +192,7 @@ class KappaComplex:
             agent_type, identifier, interface = self.parse_agent(agent)
             agent_name = self.attach_identifier(agent_type, identifier)
             self.agents[agent_name] = interface
-            self.info[agent_name] = {'id': identifier, 'type': agent_type, 'nbonds': {}, 'degree': -1}
+            self.info[agent_name] = {'id': identifier, 'type': agent_type, 'degree': -1}
 
         # replace bond ids with stub notation and get the set of bonds
         self.stubbify_bonds()
@@ -230,7 +224,7 @@ class KappaComplex:
                     elif self.bondsep in self.agents[name][site]['bond']:
                         degree += 1
                     else:
-                        # bond state is a stub or '_' or '#'
+                        # bond state is a ghost, or '_', or '#'
                         degree = -1  # reset and flag, just in case
                         self.is_pattern = True
 
@@ -302,16 +296,13 @@ class KappaComplex:
         """
         fills in the nbonds dict, which reports the number of bonds between n1 and any other node it is bound to
         """
-        for name1 in self.agents:
-            nbonds = {}
-            for s1 in self.agents[name1]:
-                if self.bondsep in self.agents[name1][s1]['bond']:
-                    name2 = self.agents[name1][s1]['bond'].split(self.bondsep)[0]
-                    if name2 in nbonds:
-                        nbonds[name2] += 1
-                    else:
-                        nbonds[name2] = 1
-            self.info[name1]['nbonds'] = nbonds
+        s = set()
+        for (a1, s1), (a2, s2) in self.bonds:
+            if (a1, a2) in s:
+                self.nbonds[(a1, a2)] += 1
+            else:
+                s.add((a1, a2))
+                self.nbonds[(a1, a2)] = 1
 
     def extract_identifier(self, name):
         agent_name, identifier = name.split(self.idsep[0])[:2]
@@ -321,13 +312,6 @@ class KappaComplex:
 
     def attach_identifier(self, name, id):
         return name + self.idsep[0] + id + self.idsep[1]
-
-    def make_bond_list(self):
-        self.nxbonds = []
-        for (a1, s1), (a2, s2) in self.bonds:  # names a1 and a2 in bonds have id attached
-            self.nxbonds += [(a1, a2,
-                              {'sites': (self.extract_identifier(a1)[1] + '.' + s1,
-                                         self.extract_identifier(a2)[1] + '.' + s2)})]
 
     def make_navigation_list(self):
         # self.navigation[a1][a2] contains a site of a1 that anchors a bond to a2
@@ -391,7 +375,7 @@ class KappaComplex:
             new_name1 = self.attach_identifier(type1, new_id1)
             self.name_list[i] = new_name1
             renamed[new_name1] = {}
-            info[new_name1] = {'id': new_id1, 'type': type1, 'nbonds': {}, 'degree': self.info[name1]['degree']}
+            info[new_name1] = {'id': new_id1, 'type': type1, 'degree': self.info[name1]['degree']}
             for site1 in self.agents[name1]:
                 renamed[new_name1][site1] = {}
                 renamed[new_name1][site1]['state'] = self.agents[name1][site1]['state']
@@ -406,7 +390,6 @@ class KappaComplex:
                     renamed[new_name1][site1]['bond'] = self.agents[name1][site1]['bond']
         self.agents = renamed
         self.info = info
-        self.nxbonds = []
 
     def get_composition(self):
         """
@@ -432,12 +415,12 @@ class KappaComplex:
         Test if the set of bonds implies a multigraph.
         :return: True / False
         """
-        s = []
-        for a1, a2, meta in self.nxbonds:
-            if {a1, a2} in s:
+        s = set()
+        for (a1, s1), (a2, s2) in self.bonds:
+            if (a1, a2) in s:
                 return True
             else:
-                s += [{a1, a2}]
+                s.add((a1, a2))
         return False
 
     def get_nxgraph_from_structure(self):
@@ -445,18 +428,18 @@ class KappaComplex:
         Note: update this to handle patterns!
         Generate a networkx graph.
         """
-        if not self.nxbonds:  # we are dealing with a singleton node
+        if not self.bonds:  # we are dealing with a singleton node
             G = nx.Graph()
             # standardize name
             name = next(iter(self.agents))
             G.add_node(name)
         else:
-            G = nx.MultiGraph()
-            # if self.is_multigraph():
-            #     G = nx.MultiGraph()
-            # else:
-            #     G = nx.Graph()
-            G.add_edges_from(self.nxbonds)
+            if self.is_multigraph():
+                G = nx.MultiGraph()
+            else:
+                G = nx.Graph()
+            for (a1, s1), (a2, s2) in self.bonds:
+                G.add_edge(a1, a2)
 
         # set identifier as node attribute 'id'
         labels = {}
@@ -492,10 +475,15 @@ class KappaComplex:
 
     def number_of_edges(self, name1, name2):
         """
-        Returns the number of bonds between two nodes; needed for isomorphism.
+        Returns the number of bonds between two nodes; used in VF2 isomorphism.
         """
-        if name2 in self.info[name1]['nbonds']:
-            return self.info[name1]['nbonds'][name2]
+        if name1 > name2:
+            pair = (name2, name1)
+        else:
+            pair = (name1, name2)
+
+        if pair in self.nbonds:
+            return self.nbonds[pair]
         else:
             return 0
 
@@ -515,11 +503,9 @@ class KappaComplex:
             if not self.is_pattern:
                 info += f"[d: {self.info[name]['degree']}] "
             info += name + '(' + interface[:-1] + ')\n'
-        info += f'{len(self.nxbonds)} specific bonds:\n'
-        for b in self.nxbonds:
-            info += b[0] + self.bondsep + b[2]['sites'][0].split('.')[1] + \
-                    ' <-> ' + \
-                    b[1] + self.bondsep + b[2]['sites'][1].split('.')[1] + '\n'
+        info += f'{len(self.bonds)} specific bonds:\n'
+        for (a1, s1), (a2, s2) in self.bonds:
+            info += a1 + self.bondsep + s1 + ' <-> ' + a2 + self.bondsep + s2 + '\n'
         info += 'composition:\n'
         info += self.sum_formula + '\n'
         return info
@@ -643,10 +629,10 @@ if __name__ == '__main__':
     for n in c3:
         print(f'adjacency of {n}: {c3[n]}')
 
-    print("big stuff from file:")
-    line = open('TestData/monster.ka', 'r').read()
-    line = re.sub(r'\n+', ' ', line)
-    start = time.process_time()
-    c1 = KappaComplex(line)
-    end = time.process_time()
-    print(f'seconds: {end - start}')
+    # print("big stuff from file:")
+    # line = open('TestData/monster.ka', 'r').read()
+    # line = re.sub(r'\n+', ' ', line)
+    # start = time.process_time()
+    # c1 = KappaComplex(line)
+    # end = time.process_time()
+    # print(f'seconds: {end - start}')

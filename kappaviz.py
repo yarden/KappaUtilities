@@ -99,24 +99,26 @@ def show_ranked_complexes(snapshot, sort='size', cutoff=3, cols=3, rows=1, prog=
         i += 1
     plt.show()
 
-    if __name__ == '__main__':
-        import kappathings as kt
-        import re
 
-        # usage scenarios
+if __name__ == '__main__':
+    import kappathings as kt
+    import re
 
-        line = open('TestData/bigly.ka', 'r').read()
-        # remove newlines that might occur in the file
-        line = re.sub(r'\n+', ' ', line)
-        # create a KappaComplex with whatever assignment of node identifiers arises
-        # (that's the normalized=False flag).
-        c1 = kt.KappaComplex(line, normalize=True)
-        print(c1)
-        print("visualize...")
-        # these seem to work; other layout programs fail (a networkx issue)
-        render(c1, prog='sfdp', node_size=80, font_size=4)
-        render(c1, prog='fdp', node_size=80, font_size=4)
-        render(c1, prog='neato', node_size=80, font_size=4)
-        render(c1, prog='twopi', node_size=80, font_size=4)
-        render(c1, prog='dot', node_size=80, font_size=4)
-        render(c1, prog='circo', node_size=80, font_size=4)
+    # usage scenarios
+
+    line = open('TestData/bigly.ka', 'r').read()
+    # remove newlines that might occur in the file
+    line = re.sub(r'\n+', ' ', line)
+    # create a KappaComplex with whatever assignment of node identifiers arises
+    # (that's the normalized=False flag).
+    c1 = kt.KappaComplex(line, normalize=True)
+    print(c1)
+    print(f'is multi-graph: {c1.is_multigraph()}')
+    print("visualize...")
+    # these seem to work; other layout programs fail (a networkx issue)
+    render(c1, prog='sfdp', node_size=80, font_size=4)
+    # render(c1, prog='fdp', node_size=80, font_size=4)
+    # render(c1, prog='neato', node_size=80, font_size=4)
+    # render(c1, prog='twopi', node_size=80, font_size=4)
+    # render(c1, prog='dot', node_size=80, font_size=4)
+    # render(c1, prog='circo', node_size=80, font_size=4)

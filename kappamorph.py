@@ -1,23 +1,13 @@
 """
-This is an adaptation of the undirected graph isomorphism code (VF2 algorithm) from networkx
+The first approach is an adaptation of the undirected graph isomorphism code (VF2 algorithm) from networkx
 (https://github.com/networkx/networkx/tree/master/networkx/algorithms/isomorphism)
 to site graph patterns in the Kappa language.
 
-VF2 references
---------------
-[1]   Luigi P. Cordella, Pasquale Foggia, Carlo Sansone, Mario Vento,
-      "A (Sub)Graph Isomorphism Algorithm for Matching Large Graphs",
-      IEEE Transactions on Pattern Analysis and Machine Intelligence,
-      vol. 26,  no. 10,  pp. 1367-1372,  Oct.,  2004.
-      http://ieeexplore.ieee.org/iel5/34/29305/01323804.pdf
-[2]   L. P. Cordella, P. Foggia, C. Sansone, M. Vento, "An Improved
-      Algorithm for Matching Large Graphs", 3rd IAPR-TC15 Workshop
-      on Graph-based Representations in Pattern Recognition, Cuen,
-      pp. 149-159, 2001.
-      http://amalfi.dis.unina.it/graph/db/papers/vf-algorithm.pdf
+The second approach exploits site graph rigidity and is much more efficient and straightforward, but also
+limited to site graphs. For Kappa applications, use the site graph approach. See __main__ at the end of the file.
 """
 
-# The original networkx code was based on work by Christopher Ellison
+# The original VF2 networkx code was based on work by Christopher Ellison
 
 from collections import deque
 import sys
@@ -33,25 +23,11 @@ def print_map(maps):
             print(f'{k} --> {v}')
 
 
-def all_embeddings(host, pattern, algo='sitegraph'):
-    # set recursion limit.
-    old_recursion_limit = sys.getrecursionlimit()
-    expected_max_recursion_level = pattern.size
-    if old_recursion_limit < 1.5 * expected_max_recursion_level:
-        # Give some breathing room.
-        sys.setrecursionlimit(int(1.5 * expected_max_recursion_level))
-
-    if algo == 'graph':
-        m = graph_embeddings(host, pattern)
-    elif algo == 'sitegraph':
-        m = sitegraph_embeddings(host, pattern)
-
-    # restore recursion limit.
-    sys.setrecursionlimit(old_recursion_limit)
-    return m
+def isomorphic(host, pattern):
+    return SiteGraphMatcher(host, pattern).embed()
 
 
-def sitegraph_embeddings(host, pattern):
+def all_embeddings(host, pattern):
     rarest_pattern_type = next(iter(pattern.composition))
     roots = [node for node in host.name_list if host.info[node]['type'] == rarest_pattern_type]
 
@@ -66,9 +42,32 @@ def sitegraph_embeddings(host, pattern):
     return mappings
 
 
-def graph_embeddings(host, pattern):
+def isomorphic_vf2(host, pattern):
+    # get the number of bonds between any two agents;
+    if not host.nbonds:
+        host.get_bond_numbers()
+    if not pattern.nbonds:
+        pattern.get_bond_numbers()
+
+    return GraphMatcher(host, pattern).embed(test='iso')
+
+
+def all_embeddings_vf2(host, pattern):
+    # set recursion limit.
+    old_recursion_limit = sys.getrecursionlimit()
+    expected_max_recursion_level = pattern.size
+    if old_recursion_limit < 1.5 * expected_max_recursion_level:
+        # Give some breathing room.
+        sys.setrecursionlimit(int(1.5 * expected_max_recursion_level))
+
     rarest_pattern_type = next(iter(pattern.composition))
     abundance = host.composition[rarest_pattern_type]
+
+    # get the number of bonds between any two agents;
+    if not host.nbonds:
+        host.get_bond_numbers()
+    if not pattern.nbonds:
+        pattern.get_bond_numbers()
 
     mappings = []
     m = 0
@@ -88,6 +87,10 @@ def graph_embeddings(host, pattern):
             break
         if i < abundance - 1:
             host.name_list = kt.shift(host.name_list)
+
+    # restore recursion limit.
+    sys.setrecursionlimit(old_recursion_limit)
+
     return mappings
 
 
@@ -580,7 +583,9 @@ class SiteGraphMatcher:
                     # the site at which we left the last pattern node to reach the current pattern node
                     site = self.pattern.navigation[(parent_p_node, p_node)]
                     # the agent that is bound on that site but in the host graph
-                    h_node = self.host.agents[h_node][site]['bond'].split(self.pattern.bondsep)[0]
+                    # (it doesn't matter if there are multiple bonds between two nodes; all we care about
+                    # is reaching the node in host that must be matched against the node in pattern.)
+                    h_node, x, x = self.host.agents[h_node][site]['bond'].partition(self.pattern.bondsep)
                 if self.node_match(h_node, p_node):
                     # update the mapping
                     self.mapping[p_node] = h_node
@@ -634,9 +639,9 @@ class SiteGraphMatcher:
                 h_bond = h_node_iface[site_name]['bond']
                 p_bond = p_node_iface[site_name]['bond']
                 if '@' in h_bond:
-                    h_partner, h_site = h_bond.split(self.host.bondsep)
+                    h_partner, x, h_site = h_bond.partition(self.host.bondsep)
                 if '@' in p_bond:
-                    p_partner, p_site = p_bond.split(self.pattern.bondsep)
+                    p_partner, x, p_site = p_bond.partition(self.pattern.bondsep)
 
                 if p_bond == '.':
                     if h_bond != '.':
@@ -672,21 +677,20 @@ class SiteGraphMatcher:
 
 if __name__ == '__main__':
     import kappathings as kt
+    import time
     import re
 
     # usage scenarios
 
-    # G1 = kt.KappaComplex('A(x[1],y[2]), B(x[2],y[3]), C(x[3],y[1]{u})', normalize=False)
-    # G2 = kt.KappaComplex('A(x,y[2]), B(x[2],y[3]), C(x[3])', normalize=False)
     G1 = kt.KappaComplex('A(b[1] a[2]), A(b[3] a[2]), B(a[1] x{p}), B(a[3] x{u})', normalize=False)
     G2 = kt.KappaComplex('A(b[2]), B(a[2] x{u})', normalize=False)
     print(G1.show())
     print(G2.show())
-    maps = all_embeddings(G1, G2, algo='graph')
-    print(f'number of embeddings of G2 into G1: {len(maps)} ')
+    maps = all_embeddings_vf2(G1, G2)
+    print(f'VF2: number of embeddings of G2 into G1: {len(maps)} ')
     print_map(maps)
-    maps = all_embeddings(G1, G2, algo='sitegraph')
-    print(f'number of embeddings of G2 into G1: {len(maps)} ')
+    maps = all_embeddings(G1, G2)
+    print(f'rigid: number of embeddings of G2 into G1: {len(maps)} ')
     print_map(maps)
 
     # input a file containing one (large) Kappa string
@@ -699,10 +703,10 @@ if __name__ == '__main__':
     G2 = kt.KappaComplex(line, normalize=True)
     print(G2.show())
     GM = GraphMatcher(G1, G2)
-    print(f'G1 and G2 are isomorphic: {GM.embed(test="iso")}')
+    print(f'VF2: G1 and G2 are isomorphic: {GM.embed(test="iso")}')
     map1 = GM.mapping
     GM = SiteGraphMatcher(G1, G2)
-    print(f'G1 and G2 are isomorphic: {GM.embed()}')
+    print(f'rigid: G1 and G2 are isomorphic: {GM.embed()}')
     map2 = GM.mapping
     if map1 == map2:
         print("Great!")
@@ -712,23 +716,27 @@ if __name__ == '__main__':
     for i in range(0, 10):
         # randomly permute identifiers:
         G2 = kt.KappaComplex('A(x[1],y[2]), B(x[2],y[3]), C(x[3],y[1])', randomize=True)
-        GM = GraphMatcher(G1, G2)
-        print(f'G1 and G2 are isomorphic: {GM.embed(test="iso")}')
+        print(f'VF2: G1 and G2 are isomorphic: {isomorphic_vf2(G1, G2)}')
     print('')
 
     G1 = kt.KappaComplex('A(x[1],y[2]), B(x[2],y[3]), C(x[3],y[1])', randomize=True)
     G2 = kt.KappaComplex('A(x[.],y[2]), B(x[2],y[3]), C(x[3],y[.])', normalize=True)
-    GM = GraphMatcher(G1, G2)
-    print(f'G1 and G2 are isomorphic: {GM.embed(test="iso")}')
-    print(f'G2 is embeddable in G1: {GM.embed()}')
+    print('G1:')
+    print(G1.show())
+    print('G2:')
+    print(G2.show())
+    print(f'VF2: G1 and G2 are isomorphic: {isomorphic_vf2(G1, G2)}')
+    print(f'VF2: G2 is embeddable in G1: {all_embeddings_vf2(G1, G2)}')
 
     G1 = kt.KappaComplex('A(x[1],y[2]), A(x[1],y[3]), C(x[2]), C(x[3]{p})', normalize=False)
     G2 = kt.KappaComplex('A(x[1],y[2]), A(x[1],y[3]), C(x[2]), C(x[3])', normalize=False)
-    GM = GraphMatcher(G1, G2)
-    print(f'G2 is embeddable in G1: {GM.embed()}')
+    print('G1:')
+    print(G1.show())
+    print('G2:')
+    print(G2.show())
+    print(f'VF2: G2 is embeddable in G1: {all_embeddings_vf2(G1, G2)}')
     G2.name_list = kt.shift(G2.name_list)
-    GM = GraphMatcher(G1, G2)
-    print(f'G1 and G2 are isomorphic: {GM.embed(test="iso")}')
+    print(f'VF2: G1 and G2 are isomorphic: {isomorphic_vf2(G1, G2)}')
 
     G1 = kt.KappaComplex('A(x[.] y[2]), A(x[2] y[3]), A(x[3] y[4]), A(x[4] y[1]), B(x[1])')
     G2 = kt.KappaComplex('A(x y[2]), A(x[2] y)')
@@ -737,39 +745,51 @@ if __name__ == '__main__':
     print('G2:')
     print(G2.show())
     maps = all_embeddings(G1, G2)
-    print(f'number of embeddings from G2 into G1: {len(maps)} ')
+    print(f'rigid: number of embeddings from G2 into G1: {len(maps)} ')
     print_map(maps)
 
     G1 = kt.KappaComplex('A(b[1] a[2]), A(b[3] a[2]), B(a[1] x{p}), B(a[3] x{u})')
     G2 = kt.KappaComplex('A(b[2]), B(a[2] x)')
-    maps = all_embeddings(G1, G2, algo='sitegraph')
-    print(f'number of embeddings of G2 into G1: {len(maps)} ')
+    maps = all_embeddings(G1, G2)
+    print(f'rigid: number of embeddings of G2 into G1: {len(maps)} ')
     print_map(maps)
     #
     G1 = kt.KappaComplex('A(b[1] a[2]), A(b[1] a[2], c[3]), B(a[3] x[.]{p})')
     G2 = kt.KappaComplex('A(b[1]), A(b[1])')
     print(G1.show())
     print(G2.show())
-    maps = all_embeddings(G1, G2, algo='sitegraph')
-    print(f'number of embeddings of G2 into G1: {len(maps)} ')
+    maps = all_embeddings(G1, G2)
+    print(f'rigid: number of embeddings of G2 into G1: {len(maps)} ')
     print_map(maps)
-    maps = all_embeddings(G1, G2, algo='graph')
-    print(f'number of embeddings of G2 into G1: {len(maps)} ')
+    maps = all_embeddings_vf2(G1, G2)
+    print(f'VF2: number of embeddings of G2 into G1: {len(maps)} ')
     print_map(maps)
 
     G1 = kt.KappaComplex('A(b[1] a[2]), A(b[3] a[2]), B(a[1] x{p}), B(a[3] x{u})')
     G2 = kt.KappaComplex('A(a[1]), A(a[1])')
     print(G1.show())
     print(G2.show())
-    maps = all_embeddings(G1, G2, algo='sitegraph')
-    print(f'number of embeddings of G2 into G1: {len(maps)} ')
+    maps = all_embeddings(G1, G2)
+    print(f'rigid: number of embeddings of G2 into G1: {len(maps)} ')
     print_map(maps)
-    maps = all_embeddings(G1, G2, algo='graph')
-    print(f'number of embeddings of G2 into G1: {len(maps)} ')
+    maps = all_embeddings_vf2(G1, G2)
+    print(f'VF2: number of embeddings of G2 into G1: {len(maps)} ')
     print_map(maps)
     #
     G1 = kt.KappaComplex('A(x[1] y[2]), A(x[2] y[3]), A(x[3] y[4]]), A(x[4] y[1]})')
     G2 = kt.KappaComplex('A(x[1] y[2]), A(x[2] y[3]), A(x[3] y[4]]), A(x[4] y[1]})')
-    maps = all_embeddings(G1, G2, algo='sitegraph')
-    print(f'number of embeddings of G2 into G1: {len(maps)}')
+    maps = all_embeddings(G1, G2)
+    print(f'rigid: number of embeddings of G2 into G1: {len(maps)}')
     print_map(maps)
+
+    # print("big stuff:")
+    # line = open('TestData/monster.ka', 'r').read()
+    # line = re.sub(r'\n+', ' ', line)
+    # start = time.process_time()
+    # c1 = kt.KappaComplex(line)
+    # end = time.process_time()
+    # print(f'seconds: {end - start}')
+    # start = time.process_time()
+    # print(isomorphic(c1, c1))
+    # end = time.process_time()
+    # print(f'seconds: {end - start}')

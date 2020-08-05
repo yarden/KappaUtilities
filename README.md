@@ -16,9 +16,8 @@ It constructs an internal representation of the form
             self.adjacency[name] = [ agent_names ]
                  self.info[name] = { 'id': identifier
                                      'type': agent_type
-                                     'nbonds': {name: int e}  # e is the number of bonds to node 'name'
                                      'degree': int n }
-                    self.nxbonds = [ (agent1, agent2, {'sites': site1-site2}) ]
+                    self.bonds   = { (agent1, site1), (agent2, site2) }  # a set
 
  where everything, except e, is of type string, and 
   * the interface dictionary of an agent is sorted by site name (needs Python 3.7+)            
@@ -26,7 +25,8 @@ It constructs an internal representation of the form
   * self.agents is a dictionary keyed by agent name with value a dictionary defining the interface of the agent
   * self.adjacency is a dictionary keyed by agent name and listing the agents bound to the key agent
   * self.info is a dictionary keyed by agent name providing additional information used by various utilities.
-  * self.nxbonds is a list of unique tuples: [ (agent1, agent2, {'sites': 'site1-site2'}) ], lexicographically sorted on agent. It is used to make a networkx graph for the purpose of visualization.
+  * self.bonds is a list of unique tuples: (agent1, site1), (agent2, site2) lexicographically sorted 
+            on agent.  
   * bonds are stubs of the form name@site indicating the name of the bound agent and the site anchoring the bond.
             
 A dictionary has no order by definition, but we can fake an order by iterating through it using an ordered list of its keys. This list is the purpose of self.name_list in the code.
@@ -122,7 +122,16 @@ provides two approaches to embedding a Kappa pattern graph G2 into a host graph 
 * class *SiteGraphMatcher*(G1, G2) exploits the 'rigidity' of site graphs. It is simple and fast.
 * class *GraphMatcher*(G1, G2) adapts the VF2 graph isomorphism implementation of networkx to Kappa site graphs. 
 
-Both classes are initialized with two Kappa expressions G1 and G2. The mapping G2 -> G1 is the dictionary GM.mapping. Both classes provide an embed() method. In the case of GraphMatcher the embed() method has an optional keyword test; test='iso' (for isomorphism) and test='embed' (default) for embedding. The function all_embeddings(G1, G2, algo='sitegraph'|'graph') yields a list of all embeddings. If G1=G2 then these are, of course, the symmetries of G1. The algo keyword chooses the algorithm, with 'sitegraph' the default. Usage scenarios are in the top-level \_\_main\_\_. For example:
+Both classes are initialized with two Kappa expressions G1 and G2. The mapping G2 -> G1 is the dictionary GM.mapping. Both classes provide an embed() method. In the case of GraphMatcher the embed() method has an optional keyword test; test='iso' (for isomorphism) and test='embed' (default) for embedding. The module also provides some wrappers:
+ 
+ * using rigidity
+    * all_embeddings(G1, G2) yields a list of all embeddings. (If G1=G2 then these are, of course, the symmetries of G1.)
+    * isomorphic(G1, G2) yields true if G1 and G2 are isomorphic.
+ * using VF2:
+    * all_embeddings_vf2(G1, G2) yields a list of all embeddings.
+    * isomorphic_vf2(G1, G2) yields true if G1 and G2 are isomorphic.
+ 
+ Usage scenarios are in the top-level \_\_main\_\_. For example:
 
 ```Python
 import kappathings as kt
