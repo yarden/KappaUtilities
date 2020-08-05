@@ -53,7 +53,6 @@ def all_embeddings(host, pattern, algo='sitegraph'):
 
 def sitegraph_embeddings(host, pattern):
     rarest_pattern_type = next(iter(pattern.composition))
-    abundance = host.composition[rarest_pattern_type]
     roots = [node for node in host.name_list if host.info[node]['type'] == rarest_pattern_type]
 
     mappings = []
@@ -562,28 +561,18 @@ class SiteGraphMatcher:
         self.mapping = {}
 
     def embed(self):
-        # set recursion limit.
-        old_recursion_limit = sys.getrecursionlimit()
-        expected_max_recursion_level = len(self.pattern)
-        if old_recursion_limit < 1.5 * expected_max_recursion_level:
-            # Give some breathing room.
-            sys.setrecursionlimit(int(1.5 * expected_max_recursion_level))
-
         try:
-            self.match(self.p_start, self.h_start)
-            flag = True
+            self.traverse(self.p_start, self.h_start)
+            return True
         except Fail:
-            flag = False
+            return False
 
-        # restore recursion limit.
-        sys.setrecursionlimit(old_recursion_limit)
-
-        return flag
-
-    def match(self, p_node, h_node):
+    def traverse(self, p_node, h_node):
+        # sans recursion
         stack = deque()
         visited = set()
-        stack.append((p_node, '', h_node))  # (start node, predecessor)
+        # stack (current pattern node, predecessor, current host node)
+        stack.append((p_node, '', h_node))
         while stack:
             p_node, parent_p_node, h_node = stack.pop()
             if p_node not in visited:
@@ -601,6 +590,28 @@ class SiteGraphMatcher:
                         stack.append((neighbor, p_node, h_node))
                 else:
                     raise Fail
+
+    # def traverse_with_recursion(self, p_node, h_node):
+    #     self.p_visited[p_node] = True
+    #     if self.start:
+    #         self.start = False
+    #     else:
+    #         # the site at which we left the last pattern node to reach the current pattern node
+    #         last_p_node = list(self.stack)[-1]  # peek
+    #         site = self.pattern.navigation[(last_p_node, p_node)]
+    #         # the agent that is bound on that site but in the host graph
+    #         h_node = self.host.agents[h_node][site]['bond'].split(self.pattern.bondsep)[0]
+    #     if not self.node_match(h_node, p_node):
+    #         raise Fail
+    #     else:
+    #         # update the mapping
+    #         self.mapping[p_node] = h_node
+    #         # store the last p_node
+    #         self.stack.append(p_node)
+    #         for neighbor in self.pattern[p_node]:
+    #             if not self.p_visited[neighbor]:
+    #                 self.traverse_with_recursion(neighbor, h_node)
+    #         self.stack.pop()
 
     def node_match(self, h_node, p_node):
         # type match
