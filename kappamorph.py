@@ -48,7 +48,6 @@ def isomorphic_vf2(host, pattern):
         host.get_bond_numbers()
     if not pattern.nbonds:
         pattern.get_bond_numbers()
-
     return GraphMatcher(host, pattern).embed(test='iso')
 
 

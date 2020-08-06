@@ -92,14 +92,16 @@ class KappaComplex:
         # binding_id_re = r'(\[(?:.|\d+)\])'
         binding_re = r'(\[(?:.*)\])'  # we still need to parse the bond expression
         # this can be . | # | number | site.agent (a stub)
-        self.binding_state_re = r'^' + r'(?:\.|_|#|\d+)' + r'|(?:' + self.symbols + r')\.(?:' + self.symbols + r')'
+        self.binding_state_re = \
+            re.compile(r'^' + r'(?:\.|_|#|\d+)' + r'|(?:' + self.symbols + r')\.(?:' + self.symbols + r')')
         # using optional lookahead, since the internal state is optional and there is no prescribed order.
         # (gobble up the string with .*)
-        self.site_re = r'^' + site_name_re + r'(?=.*' + internal_state_re + r')?' + r'(?=.*' + binding_re + r')?.*'
-
+        self.site_re = \
+            re.compile(r'^' + site_name_re + r'(?=.*' + internal_state_re + r')?' + r'(?=.*' + binding_re + r')?.*')
         agent_name_re = r'(' + self.symbols + r')'
         agent_interface_re = r'\(([^()]*)\)'
-        self.agent_re = r'^' + agent_name_re + agent_interface_re + r'$'
+        self.agent_re = \
+            re.compile(r'^' + agent_name_re + agent_interface_re + r'$')
 
         # produce an internal representation of the complex from json or kappa
         if data:
@@ -182,7 +184,7 @@ class KappaComplex:
         """
         self.counter = 0
         interface_re = r'\([^()]*\)'
-        agent_re = self.symbols + interface_re
+        agent_re = self.symbols + interface_re  # probably not worth compiling; used only once
 
         expression = re.sub(r'\s+|\t+|\n+', ' ', data)  # remove line breaks and white matter
         # capture all agents
@@ -215,8 +217,10 @@ class KappaComplex:
                         degree += 1
                         if link in bonds:
                             [(name1, site1)] = bonds[link]
-                            self.agents[name1][site1]['bond'] = name + self.bondsep + site
-                            self.agents[name][site]['bond'] = name1 + self.bondsep + site1
+                            # self.agents[name1][site1]['bond'] = name + self.bondsep + site
+                            # self.agents[name][site]['bond'] = name1 + self.bondsep + site1
+                            self.agents[name1][site1]['bond'] = ''.join([name, self.bondsep, site])
+                            self.agents[name][site]['bond'] = ''.join([name1, self.bondsep, site1])
                             b = sorted([(name1, site1), (name, site)], key=lambda i: i[0])
                             self.bonds.add(tuple(b))  # collect unique bonds
                         else:
@@ -231,7 +235,7 @@ class KappaComplex:
             self.info[name]['degree'] = degree
 
     def parse_agent(self, agent_expression):
-        match = re.match(self.agent_re, agent_expression)
+        match = self.agent_re.match(agent_expression)
         if not match:
             exit('Invalid agent declaration <' + agent_expression + '>')
         agent_type = match.group(1)
@@ -256,7 +260,7 @@ class KappaComplex:
         return agent_type, identifier, interface
 
     def parse_site(self, site_expression):
-        match = re.match(self.site_re, site_expression)
+        match = self.site_re.match(site_expression)
         if not match:
             exit('Could not parse site ' + site_expression)
         # return site name, internal state and binding state (without parentheses)
@@ -269,7 +273,7 @@ class KappaComplex:
         binding_state = '#'  # don't care (absent) by default
         if match.group(3):  # there is an explicit binding state
             binding_expression = match.group(3)[1:-1]  # remove parens
-            match = re.match(self.binding_state_re, binding_expression)  # continue parsing
+            match = self.binding_state_re.match(binding_expression)  # continue parsing
             if match:
                 binding_state = match.group(0)  # either '.' or '#' or number or stub
                 # warning: if the site name starts with '_' we have a problem; fix later...
@@ -286,11 +290,11 @@ class KappaComplex:
             adjacency = []
             for s1 in self.agents[name1]:
                 if self.bondsep in self.agents[name1][s1]['bond']:
-                    name2 = self.agents[name1][s1]['bond'].split(self.bondsep)[0]
-                    adjacency += [name2]
+                    name2, x, x = self.agents[name1][s1]['bond'].partition(self.bondsep)
+                    adjacency.append(name2)
             # sort on rarity and type
-            adj = sorted(adjacency, key=lambda i: (self.composition[self.info[i]['type']], self.info[i]['type']))
-            self.adjacency[name1] = adj
+            # adj = sorted(adjacency, key=lambda i: (self.composition[self.info[i]['type']], self.info[i]['type']))
+            self.adjacency[name1] = adjacency
 
     def get_bond_numbers(self):  # fuse with adjacency list function ?
         """

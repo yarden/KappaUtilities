@@ -124,7 +124,7 @@ provides two approaches to embedding a Kappa pattern graph G2 into a host graph 
 
 Both classes are initialized with two Kappa expressions G1 and G2. The mapping G2 -> G1 is the dictionary GM.mapping. Both classes provide an embed() method. In the case of GraphMatcher the embed() method has an optional keyword test; test='iso' (for isomorphism) and test='embed' (default) for embedding. The module also provides some wrappers:
  
- * using rigidity
+ * using rigidity (vastly preferable)
     * all_embeddings(G1, G2) yields a list of all embeddings. (If G1=G2 then these are, of course, the symmetries of G1.)
     * isomorphic(G1, G2) yields true if G1 and G2 are isomorphic.
  * using VF2:
