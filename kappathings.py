@@ -35,7 +35,7 @@ class KappaComplex:
                  self.info[name] = { 'id': identifier
                                      'type': agent_type
                                      'degree': int n }
-                    self.bonds   = { (agent1, site1), (agent2, site2) }  # a set
+                    self.bonds   = { ( (agent1, site1), (agent2, site2) ) }  # a set
             where everything, except e, is of type string, and
             * the interface dictionary of an agent is sorted by site name (needs Python 3.7+)
             * agent names are unique, consisting of type + identifier, eg Axin.42. (including the last dot), where
@@ -55,8 +55,6 @@ class KappaComplex:
             self.size
             (3)
             self.composition (that's the sum formula, sorted by agent name)
-            (4)
-            optionally self.nxgraph using method get_nxgraph_from_structure()
     """
 
     def __init__(self, data, count=0, normalize=False, randomize=False):
@@ -77,7 +75,6 @@ class KappaComplex:
         self.adjacency = {}
         self.info = {}
         self.bonds = set()
-        self.nxgraph = None
         self.nbonds = {}   # nbonds[(a1, a2)] = n of bonds between a1 and a2 for a1 <= a2
         self.name_list = []
         self.navigation = {}
@@ -366,7 +363,6 @@ class KappaComplex:
         Note: nodes must be lexicographically sorted by name.
         """
         self.bonds = set()  # reset
-        self.nxgraph = None  # reset
 
         # apply permutation
         info = {}
@@ -427,32 +423,6 @@ class KappaComplex:
                 s.add((a1, a2))
         return False
 
-    def get_nxgraph_from_structure(self):
-        """
-        Note: update this to handle patterns!
-        Generate a networkx graph.
-        """
-        if not self.bonds:  # we are dealing with a singleton node
-            G = nx.Graph()
-            # standardize name
-            name = next(iter(self.agents))
-            G.add_node(name)
-        else:
-            if self.is_multigraph():
-                G = nx.MultiGraph()
-            else:
-                G = nx.Graph()
-            for (a1, s1), (a2, s2) in self.bonds:
-                G.add_edge(a1, a2)
-
-        # set identifier as node attribute 'id'
-        labels = {}
-        for node, nodedata in G.nodes.items():
-            labels[node] = {'id': self.extract_identifier(node)[1]}
-        nx.set_node_attributes(G, labels)
-
-        self.nxgraph = G
-
     def nodes(self):
         """
         This emulates the networkx' G.nodes() method returning a list of node names.
@@ -493,7 +463,7 @@ class KappaComplex:
 
     def __str__(self):
         """
-        pretty print
+        exhaustive pretty print
         """
         info = f'expression has {self.size} agents:\n'
         if self.is_pattern:
@@ -516,7 +486,7 @@ class KappaComplex:
 
     def show(self):
         """
-        short pretty print
+        shorter pretty print
         """
         info = ''
         for i in range(0, self.size):
