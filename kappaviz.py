@@ -4,6 +4,46 @@ from matplotlib.lines import Line2D
 import plotly.graph_objects as go
 
 
+def get_nxgraph(komplex):
+    """
+    Generate a networkx graph. For now this assumes one connected component (such as a molecular species).
+    (Note: update this to handle patterns.)
+
+    :param komplex:
+    :return:
+    """
+    if not komplex.bonds:  # we are dealing with a singleton node
+        nxG = nx.Graph()
+        name = next(iter(komplex.agents))
+        nxG.add_node(name)
+    else:
+        if komplex.is_multigraph():
+            nxG = nx.MultiGraph()
+        else:
+            nxG = nx.Graph()
+        for (a1, s1), (a2, s2) in komplex.bonds:
+            nxG.add_edge(a1, a2)
+
+    # set node attributes
+    attr = {}
+    for node, nodedata in nxG.nodes.items():
+        attr[node] = {'type': node.split(komplex.idsep[0])[0], 'id': komplex.extract_identifier(node)[1]}
+    nx.set_node_attributes(nxG, attr)
+
+    # set edge attributes
+    attr = {}
+    for ((a1, s1), (a2, s2)) in komplex.bonds:
+        txt = komplex.info[a1]['type'] + '.' + s1 + '<-->' + komplex.info[a2]['type'] + '.' + s2
+        attr[(a1, a2)] = {'sites': txt}
+    nx.set_edge_attributes(nxG, attr)
+
+    return nxG
+
+
+def write_dot(komplex, file_name='complex.dot'):
+    nx.nx_agraph.write_dot(get_nxgraph(komplex), file_name)
+
+
 class Renderer:
     def __init__(self, komplex, prog='neato', node_info=True):
         """
@@ -17,10 +57,8 @@ class Renderer:
         """
         # (komplex is never assigned, so it should be effectively 'pass by reference')
 
-        self.nxG = nx.Graph()
-
         # create the networkx version of 'komplex'
-        self.get_nxgraph(komplex)
+        self.nxG = get_nxgraph(komplex)
         self.composition = komplex.composition
 
         # positions = nx.nx_pydot.graphviz_layout(self.nxG, prog=prog)
@@ -210,42 +248,12 @@ class Renderer:
                       )
 
         if file_name:
-            fig.write_image(file_name)
+            if file_name.endswith('.html'):
+                fig.write_html(file_name)
+            else:
+                fig.write_image(file_name)
         else:
             fig.show(config=config)
-
-    def get_nxgraph(self, komplex):
-        """
-        Generate a networkx graph. For now this assumes one connected component (such as a molecular species).
-        (Note: update this to handle patterns.)
-
-        :param komplex:
-        :return:
-        """
-        if not komplex.bonds:  # we are dealing with a singleton node
-            self.nxG = nx.Graph()
-            name = next(iter(komplex.agents))
-            self.nxG.add_node(name)
-        else:
-            if komplex.is_multigraph():
-                self.nxG = nx.MultiGraph()
-            else:
-                self.nxG = nx.Graph()
-            for (a1, s1), (a2, s2) in komplex.bonds:
-                self.nxG.add_edge(a1, a2)
-
-        # set node attributes
-        attr = {}
-        for node, nodedata in self.nxG.nodes.items():
-            attr[node] = {'type': node.split(komplex.idsep[0])[0], 'id': komplex.extract_identifier(node)[1]}
-        nx.set_node_attributes(self.nxG, attr)
-
-        # set edge attributes
-        attr = {}
-        for ((a1, s1), (a2, s2)) in komplex.bonds:
-            txt = komplex.info[a1]['type'] + '.' + s1 + '<-->' + komplex.info[a2]['type'] + '.' + s2
-            attr[(a1, a2)] = {'sites': txt}
-        nx.set_edge_attributes(self.nxG, attr)
 
 
 def show_ranked_complexes(snapshot, sort='size', cutoff=3, cols=3, rows=1, prog='neato', node_size=20, font_size=4):
@@ -292,9 +300,11 @@ if __name__ == '__main__':
     c1 = kt.KappaComplex(line, normalize=True)
     print(c1)
     print(f'is multi-graph: {c1.is_multigraph()}')
+    write_dot(c1, 'complex.dot')
     r = Renderer(c1)
     r.nx_render(node_size=100, labels='none')
     r.html_render()
+    r.html_render(file_name='complex.html')
     # r.nx_render(c1, prog='sfdp', node_size=80, font_size=4)
     # r.nx_render(c1, prog='fdp', node_size=80, font_size=4)
     # r.nx_render(c1, prog='neato', node_size=80, font_size=4)
