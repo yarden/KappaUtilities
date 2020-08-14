@@ -17,7 +17,7 @@ It constructs an internal representation of the form
                  self.info[name] = { 'id': identifier
                                      'type': agent_type
                                      'degree': int n }
-                    self.bonds   = { (agent1, site1), (agent2, site2) }  # a set
+                    self.bonds   = { ( (agent1, site1), (agent2, site2) ) }  # a set of tuples
 
  where everything, except e, is of type string, and 
   * the interface dictionary of an agent is sorted by site name (needs Python 3.7+)            
@@ -35,7 +35,6 @@ Global properties:
 * self.size: the number of agents in the complex
 * self.composition: a dictionary keyed by agent type with value the abundance of that type in the complex.
 * self.sum_formula: the sum formula of the complex.
-* self.nxgraph the networkx representation of the complex for the purpose of visualization.
             
 KappaComplex takes optional additional inputs: 
   * the number of complexes of this type (count=0 by default); usually determined by parsing the snapshot.
@@ -113,7 +112,7 @@ provides class *Snapshot*, which reads a snapshot file in JSON format or in Kapp
 
 **kappaviz.py**
 
-provides a rendering of a *Kappacomplex* through render(), using networkx to do all the work. Again \_\_main\_\_ shows some usage scenarios.
+provides a rendering of a *Kappacomplex* through class Renderer, which provides methods self.nx_render() to render (and write) using networkx and its graphviz interface and self.html_render() to render (and write) using plotly. Again \_\_main\_\_ shows some usage scenarios.
 
 **kappamorph.py**
 
