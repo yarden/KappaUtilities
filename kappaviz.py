@@ -40,8 +40,31 @@ def get_nxgraph(komplex):
     return nxG
 
 
-def write_dot(komplex, file_name='complex.dot'):
-    nx.nx_agraph.write_dot(get_nxgraph(komplex), file_name)
+def write_dot(komplex, file_name='complex.dot',
+              palette=('blue', 'green', 'red', 'cyan', 'magenta', 'yellow', 'khaki', 'silver'),
+              shapalette=('polygon', 'oval', 'circle', 'triangle', 'diamond', 'house', 'hexagon',
+                          'parallelogram', 'pentagon', 'rectangle'),
+              uniform=True, shape='oval'):
+    nxG = get_nxgraph(komplex)
+
+    # assign colors to nodes
+    color = {}
+    shapes = {}
+    i = 0
+    # fill palette index in order of (descending) frequency
+    for type in komplex.composition.keys():
+        color[type] = i % len(palette)
+        shapes[type] = i % len(shapalette)
+        i += 1
+    for node in nxG.nodes():
+        nxG.nodes[node]['style'] = 'filled'
+        nxG.nodes[node]['fillcolor'] = palette[color[nxG.nodes[node]['type']]]
+        if not uniform:
+            nxG.nodes[node]['shape'] = shapalette[shapes[nxG.nodes[node]['type']]]
+        else:
+            nxG.nodes[node]['shape'] = shape
+
+    nx.nx_agraph.write_dot(nxG, file_name)
 
 
 class Renderer:
@@ -301,10 +324,10 @@ if __name__ == '__main__':
     print(c1)
     print(f'is multi-graph: {c1.is_multigraph()}')
     write_dot(c1, 'complex.dot')
-    r = Renderer(c1)
-    r.nx_render(node_size=100, labels='none')
-    r.html_render()
-    r.html_render(file_name='complex.html')
+    # r = Renderer(c1)
+    # r.nx_render(node_size=100, labels='none')
+    # r.html_render()
+    # r.html_render(file_name='complex.html')
     # r.nx_render(c1, prog='sfdp', node_size=80, font_size=4)
     # r.nx_render(c1, prog='fdp', node_size=80, font_size=4)
     # r.nx_render(c1, prog='neato', node_size=80, font_size=4)
