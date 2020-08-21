@@ -486,7 +486,7 @@ class KappaComplex:
 
     def show(self):
         """
-        shorter pretty print
+        print Kappa string from representation
         """
         info = ''
         for i in range(0, self.size):
@@ -495,10 +495,8 @@ class KappaComplex:
             iface = self.agents[name]
             for s in iface:
                 interface += s + '{' + iface[s]['state'] + '}' + '[' + iface[s]['bond'] + '] '
-            if not self.is_pattern:
-                info += f"[d: {self.info[name]['degree']}] "
-            info += name + '(' + interface[:-1] + ')\n'
-        return info[:-1]  # remove last newline
+            info += name + '(' + interface[:-1] + '), '
+        print(info[:-2])  # remove last comma+blank
 
     def __iter__(self):
         return iter(self.name_list)
@@ -544,7 +542,7 @@ if __name__ == '__main__':
     # print it
     print(c)
     # short version
-    print(c.show())
+    c.show()
 
     print(f'count: {c.count}')
     print(f'size: {c.size}')

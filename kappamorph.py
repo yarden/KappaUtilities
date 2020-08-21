@@ -11,6 +11,7 @@ limited to site graphs. For Kappa applications, use the site graph approach. See
 
 from collections import deque
 import sys
+import kappathings as kt
 
 
 # The graphs are given by the internal representation in 'kappathings.py',
@@ -60,7 +61,14 @@ def all_embeddings_vf2(host, pattern):
         sys.setrecursionlimit(int(1.5 * expected_max_recursion_level))
 
     rarest_pattern_type = next(iter(pattern.composition))
-    abundance = host.composition[rarest_pattern_type]
+    if rarest_pattern_type not in host.composition.keys():
+        return []
+    else:
+        abundance = host.composition[rarest_pattern_type]
+
+    names = list(map(lambda name: name.split(host.idsep[0])[0], host.name_list))
+    host_name_list_saved = host.name_list
+    host.name_list = kt.shift(host.name_list, names.index(rarest_pattern_type))
 
     # get the number of bonds between any two agents;
     if not host.nbonds:
@@ -82,13 +90,16 @@ def all_embeddings_vf2(host, pattern):
             if not found:
                 mappings += [GM.mapping]
                 m += 1
-        else:
-            break
+        # else:
+        #     break
         if i < abundance - 1:
             host.name_list = kt.shift(host.name_list)
 
-    # restore recursion limit.
+    # restore recursion limit
     sys.setrecursionlimit(old_recursion_limit)
+
+    # restore host name list
+    host.name_list = host_name_list_saved
 
     return mappings
 
@@ -164,6 +175,8 @@ class GraphMatcher:
                 return False
             # Check composition
             for node_type in self.G2.composition:
+                if node_type not in self.G1.composition.keys():
+                    return False
                 if self.G1.composition[node_type] < self.G2.composition[node_type]:
                     return False
         elif self.test == 'iso':
@@ -675,7 +688,7 @@ class SiteGraphMatcher:
 
 
 if __name__ == '__main__':
-    import kappathings as kt
+    import kappasnap as ks
     import time
     import re
 
@@ -683,8 +696,8 @@ if __name__ == '__main__':
 
     G1 = kt.KappaComplex('A(b[1] a[2]), A(b[3] a[2]), B(a[1] x{p}), B(a[3] x{u})', normalize=False)
     G2 = kt.KappaComplex('A(b[2]), B(a[2] x{u})', normalize=False)
-    print(G1.show())
-    print(G2.show())
+    G1.show()
+    G2.show()
     maps = all_embeddings_vf2(G1, G2)
     print(f'VF2: number of embeddings of G2 into G1: {len(maps)} ')
     print_map(maps)
@@ -700,7 +713,7 @@ if __name__ == '__main__':
     # (that's the normalize=False flag).
     G1 = kt.KappaComplex(line, normalize=False)
     G2 = kt.KappaComplex(line, normalize=True)
-    print(G2.show())
+    G2.show()
     GM = GraphMatcher(G1, G2)
     print(f'VF2: G1 and G2 are isomorphic: {GM.embed(test="iso")}')
     map1 = GM.mapping
@@ -721,18 +734,18 @@ if __name__ == '__main__':
     G1 = kt.KappaComplex('A(x[1],y[2]), B(x[2],y[3]), C(x[3],y[1])', randomize=True)
     G2 = kt.KappaComplex('A(x[.],y[2]), B(x[2],y[3]), C(x[3],y[.])', normalize=True)
     print('G1:')
-    print(G1.show())
+    G1.show()
     print('G2:')
-    print(G2.show())
+    G2.show()
     print(f'VF2: G1 and G2 are isomorphic: {isomorphic_vf2(G1, G2)}')
     print(f'VF2: G2 is embeddable in G1: {all_embeddings_vf2(G1, G2)}')
 
     G1 = kt.KappaComplex('A(x[1],y[2]), A(x[1],y[3]), C(x[2]), C(x[3]{p})', normalize=False)
     G2 = kt.KappaComplex('A(x[1],y[2]), A(x[1],y[3]), C(x[2]), C(x[3])', normalize=False)
     print('G1:')
-    print(G1.show())
+    G1.show()
     print('G2:')
-    print(G2.show())
+    G2.show()
     print(f'VF2: G2 is embeddable in G1: {all_embeddings_vf2(G1, G2)}')
     G2.name_list = kt.shift(G2.name_list)
     print(f'VF2: G1 and G2 are isomorphic: {isomorphic_vf2(G1, G2)}')
@@ -740,9 +753,9 @@ if __name__ == '__main__':
     G1 = kt.KappaComplex('A(x[.] y[2]), A(x[2] y[3]), A(x[3] y[4]), A(x[4] y[1]), B(x[1])')
     G2 = kt.KappaComplex('A(x y[2]), A(x[2] y)')
     print('G1:')
-    print(G1.show())
+    G1.show()
     print('G2:')
-    print(G2.show())
+    G2.show()
     maps = all_embeddings(G1, G2)
     print(f'rigid: number of embeddings from G2 into G1: {len(maps)} ')
     print_map(maps)
@@ -755,8 +768,8 @@ if __name__ == '__main__':
     #
     G1 = kt.KappaComplex('A(b[1] a[2]), A(b[1] a[2], c[3]), B(a[3] x[.]{p})')
     G2 = kt.KappaComplex('A(b[1]), A(b[1])')
-    print(G1.show())
-    print(G2.show())
+    G1.show()
+    G2.show()
     maps = all_embeddings(G1, G2)
     print(f'rigid: number of embeddings of G2 into G1: {len(maps)} ')
     print_map(maps)
@@ -766,8 +779,8 @@ if __name__ == '__main__':
 
     G1 = kt.KappaComplex('A(b[1] a[2]), A(b[3] a[2]), B(a[1] x{p}), B(a[3] x{u})')
     G2 = kt.KappaComplex('A(a[1]), A(a[1])')
-    print(G1.show())
-    print(G2.show())
+    G1.show()
+    G2.show()
     maps = all_embeddings(G1, G2)
     print(f'rigid: number of embeddings of G2 into G1: {len(maps)} ')
     print_map(maps)
