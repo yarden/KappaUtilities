@@ -134,15 +134,42 @@ class KappaComplex:
     def get_structure_from_json(self, data):
         """
         Given a complex in JSON snapshot format, construct the internal representation as in the class documentation.
-
         :param data: a JSON format (string or list) with schema [  list of agents  ] as defined in
                      kappasnap.KappaSnapShot
         """
+
+        def parse_link(link):
+            """
+            Parse the 'port_links' field in a way that deals with both old and
+            and new JSON formats (gah).
+
+            In new format we have extraneous viz information in links, e.g.:
+              [[[0, 1], 0]]
+            in old format we don't, i.e., we'd instead have:
+              [[1, 0]]
+            the problem in the current code is that the JSON parsing (and hence
+            he actual spec being followed) is split between this file (kappathings.py)
+            and kappasnap.py. All of this should be rewritten to use the snapshot
+            parser in kappy, which correctly handles all the supported format.
+            everything in KappaUtilities can easily use that representation. -YK
+            (In new format, we have this (more redundant) representation
+            link -> [ [ [ 0, list index of agent to which this agent is connected ],
+                  index of connecting site of connected agent ] ] )
+            """
+            if type(link[0][0]) is list:
+                # new links format
+                partner_ind = link[0][0][1]
+                site_ind = link[0][1]
+            else:
+                # old links format
+                partner_ind = link[0][0]
+                site_ind = link[0][1]
+            return partner_ind, site_ind
+
         if type(data) is str:  # otherwise data is already parsed
             data = json.loads(data)
         self.bonds = set()  # set of tuples ((agent1, site1), (agent2, site2))
         this_complex = self.make_agent_names_unique(data)  # a list of 'agent' as per json schema
-
         for a in this_complex:
             agent_name = a['node_type']
             agent_type, identifier = self.extract_identifier(a['node_type'])
@@ -152,17 +179,19 @@ class KappaComplex:
                 site_name = s['site_name']
                 link = s['site_type'][1]['port_links']  # site link (type list)
                 if not link:
+                    # agent isn't bound to anything
                     bond = '.'
                 else:
                     degree += 1
-                    # binding partner
-                    partner = this_complex[link[0][0][1]]
+                    # indices of the agent that's the binding partner, and of the
+                    # site on that agent through which the bond is made -YK
+                    partner_ind, site_ind = parse_link(link)
+                    partner = this_complex[partner_ind]
                     agent2 = partner['node_type']
-                    site2 = partner['node_sites'][link[0][1]]['site_name']
+                    site2 = partner['node_sites'][site_ind]['site_name']
                     bond = agent2 + self.bondsep + site2
                     b = sorted([(a['node_type'], site_name), (agent2, site2)], key=lambda i: i[0])
                     self.bonds.add(tuple(b))  # unique bonds
-
                 state_ = s['site_type'][1]['port_states']  # site state
                 if not state_:
                     state = ''

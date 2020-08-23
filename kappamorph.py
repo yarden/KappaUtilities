@@ -25,7 +25,7 @@ def print_map(maps):
 
 
 def isomorphic(host, pattern):
-    return SiteGraphMatcher(host, pattern).embed()
+    return SiteGraphMatcher(host, pattern).embed(test='iso')
 
 
 def all_embeddings(host, pattern):
@@ -575,7 +575,31 @@ class SiteGraphMatcher:
             self.h_start = h_start
         self.mapping = {}
 
-    def embed(self):
+    def embed(self, test='embed'):
+
+        if test == 'embed':
+            # Check size
+            if self.host.size < self.pattern.size:
+                return False
+            # Check composition
+            for node_type in self.pattern.composition:
+                if node_type not in self.host.composition.keys():
+                    return False
+                if self.host.composition[node_type] < self.pattern.composition[node_type]:
+                    return False
+        elif test == 'iso':
+            # Check size
+            if self.host.size != self.pattern.size:
+                return False
+            # Check composition
+            if self.host.sum_formula != self.pattern.sum_formula:
+                return False
+            # Check local properties
+            d1 = sorted(d for n, d in self.host.degree())
+            d2 = sorted(d for n, d in self.pattern.degree())
+            if d1 != d2:
+                return False
+
         try:
             self.traverse(self.p_start, self.h_start)
             return True

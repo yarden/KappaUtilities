@@ -1,5 +1,4 @@
 import kappathings as kt
-
 import re
 import gzip
 import json
@@ -193,12 +192,23 @@ class JsonSnapShot:
         #                                        |
         #                                        jth agent
         #
+
         self.snap_name = self.data['snapshot_file']
         self.time = float(self.data['snapshot_time'])
         self.event = int(self.data['snapshot_event'])
         self.number_of_distinct_complexes = len(self.data['snapshot_agents'])
+        # this function encodes part of the JSON spec that's being parsed
+        # there should instead be just one spot where JSON (or KA) is parsed
+        # and converted into an internal representation. ideally this should be
+        # done by kappy and this package should be agnostic to the
+        # file format spec -YK
         for c in self.data['snapshot_agents']:
-            komplex = kt.KappaComplex(c[1][0], count=c[0])
+            abundance, comp_info = c[0], c[1]
+            # deal with old JSON format which didn't have
+            # here a list of lists (ugh..) -YK
+            if type(comp_info[0]) != list:
+                comp_info = [comp_info]
+            komplex = kt.KappaComplex(comp_info[0], count=c[0])
             self.complex.append(komplex)
 
 
@@ -209,6 +219,32 @@ if __name__ == '__main__':
 
     import kappamorph as km
     import kappaviz as viz
+
+    # Yarden tests (these take 10 minutes for rigid and 43 minutes for VF2)
+
+    snap1_obj = SnapShot('TestData/snap_large.ka')
+    snap2_obj = SnapShot('TestData/snap_large.ka')
+    snap1_size = len(snap1_obj.complex)
+    snap2_size = len(snap2_obj.complex)
+
+    intersection = []
+    for complex1 in snap1_obj.complex:
+        for complex2 in snap2_obj.complex:
+            if km.isomorphic(complex1, complex2):
+                intersection.append(complex1)
+                break
+    print(f'size of intersection: {len(intersection)}')
+    print(intersection)
+
+    intersection_vf = []
+    for complex1 in snap1_obj.complex:
+        for complex2 in snap2_obj.complex:
+            if km.isomorphic_vf2(complex1, complex2):
+                intersection_vf.append(complex1)
+                break
+    print(f'size of intersection: {len(intersection_vf)}')
+    print(intersection_vf)
+
 
     # usage scenarios
 
