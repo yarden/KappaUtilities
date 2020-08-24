@@ -548,14 +548,27 @@ class SiteGraphMatcher:
     """
 
     def __init__(self):
-        self.pattern = ''
-        self.host = ''
         self.p_start = ''
         self.h_start = ''
         self.mapping = {}
 
     def isomorphic(self, host, pattern):
-        return self.embed(host, pattern, test='iso')
+        return self.morphism(host, pattern, 'iso')
+
+    def embed(self, host, pattern):
+        return self.morphism(host, pattern, 'embed')
+
+    def morphism(self, host, pattern, test):
+        rarest_pattern_type = next(iter(pattern.composition))
+        roots = [node for node in host.name_list if host.info[node]['type'] == rarest_pattern_type]
+
+        for start in roots:
+            if self._embed(host, pattern, h_start=start, test=test):
+                return True
+        return False
+
+    def isomorphic_unsafe(self, host, pattern, h_start, p_start):
+        return self._embed(host, pattern, h_start=h_start, p_start=p_start, test='iso')
 
     def all_embeddings(self, host, pattern):
         rarest_pattern_type = next(iter(pattern.composition))
@@ -563,16 +576,19 @@ class SiteGraphMatcher:
 
         mappings = []
         for start in roots:
-            if self.embed(host, pattern, h_start=start):
+            if self._embed(host, pattern, h_start=start):
                 # sort sensibly for readability
                 self.mapping = {k: v for k, v in sorted(self.mapping.items(), key=lambda x: x[0])}
                 # the rigidity approach never produces identical embeddings
                 mappings += [self.mapping]
         return mappings
 
-    def embed(self, host, pattern, test='embed', h_start=None):
+    def _embed(self, host, pattern, test='embed', p_start=None, h_start=None):
 
-        self.p_start = pattern.name_list[0]
+        if not p_start:
+            self.p_start = pattern.name_list[0]
+        else:
+            self.p_start = p_start
         if not h_start:
             self.h_start = host.name_list[0]
         else:
@@ -718,6 +734,20 @@ if __name__ == '__main__':
     import kappasnap as ks
     import time
     import re
+
+    G1 = kt.KappaComplex('A(b[1] a[2]), A(b[3] a[2]), B(a[1] x{p}), B(a[3] x{u})', normalize=False)
+    print(G1.name_list)
+    G2 = kt.KappaComplex('A(b[3] a[2]), A(b[1] a[2]), B(a[1] x{p}), B(a[3] x{u})', normalize=False)
+    print(G2.name_list)
+
+    GM = GraphMatcher()
+    SGM = SiteGraphMatcher()
+    print(f'VF2: G1 and G2 are isomorphic: {GM.isomorphic_vf2(G1, G2)}')
+    print(f'rigid: G1 and G2 are isomorphic: {SGM.isomorphic_unsafe(G1, G2, None, None)}')
+    print(f'rigid: G1 and G2 are isomorphic: {SGM.isomorphic_unsafe(G1, G2, "A.1.", "A.2.")}')
+    print(f'rigid: G1 and G2 are isomorphic: {SGM.isomorphic(G1, G2)}')
+    if GM.mapping == SGM.mapping:
+        print("Great!")
 
     # usage scenarios
 
