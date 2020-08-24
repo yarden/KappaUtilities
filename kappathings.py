@@ -112,7 +112,7 @@ class KappaComplex:
         self.size = len(self.agents)
         # get the names list (for accessing the agent dictionary in a desired order)
         self.name_list = [k for k in self.agents]
-        # sort name list by type abundance (primary) and type (secondary); but get first the composition.
+        # get the composition
         self.get_composition()
         # sort name list by rarity (primary) and type (secondary)
         self.name_list = sorted(self.name_list,

@@ -118,38 +118,39 @@ provides a rendering of a *Kappacomplex* through class Renderer, which provides 
 
 provides two approaches to embedding a Kappa pattern graph G2 into a host graph G1:
 
-* class *SiteGraphMatcher*(G1, G2) exploits the 'rigidity' of site graphs. It is simple and fast.
-* class *GraphMatcher*(G1, G2) adapts the VF2 graph isomorphism implementation of networkx to Kappa site graphs. 
+* class *SiteGraphMatcher*() exploits the 'rigidity' of site graphs. It is simple and fast.
+* class *GraphMatcher*() adapts the VF2 graph isomorphism implementation of networkx to Kappa site graphs. 
 
-Both classes are initialized with two Kappa expressions G1 and G2. The mapping G2 -> G1 is the dictionary GM.mapping. Both classes provide an embed() method. In the case of GraphMatcher the embed() method has an optional keyword test; test='iso' (for isomorphism) and test='embed' (default) for embedding. The module also provides some wrappers:
- 
- * using rigidity (vastly preferable)
-    * all_embeddings(G1, G2) yields a list of all embeddings. (If G1=G2 then these are, of course, the symmetries of G1.)
-    * isomorphic(G1, G2) yields true if G1 and G2 are isomorphic.
- * using VF2:
-    * all_embeddings_vf2(G1, G2) yields a list of all embeddings.
-    * isomorphic_vf2(G1, G2) yields true if G1 and G2 are isomorphic.
+The mapping G2 -> G1 is the dictionary self.mapping. Class *SiteGraphMatcher* provides an embed(G1, G2) method, an isomorphism(G1, G2) method, and an all_embeddings(G1, G2) method. Likewise, class *GraphMatcher* provides an embed_vf2(G1, G2) method, an isomorphism_vf2(G1, G2) method, and an all_embeddings_vf2(G1, G2) method.
  
  Usage scenarios are in the top-level \_\_main\_\_. For example:
 
 ```Python
-import kappathings as kt
-import kappamorph as km
+G1 = kt.KappaComplex('A(b[1] a[2]), A(b[3] a[2]), B(a[1] x{p}), B(a[3] x{u})', normalize=False)
+G2 = kt.KappaComplex('A(b[2]), B(a[2] x{u})', normalize=False)
+G1.show()
+G2.show()
+GM = GraphMatcher()
+SGM = SiteGraphMatcher()
+maps = GM.all_embeddings_vf2(G1, G2)
+print(f'VF2: number of embeddings of G2 into G1: {len(maps)} ')
+print_map(maps)
+maps = SGM.all_embeddings(G1, G2)
+print(f'rigid: number of embeddings of G2 into G1: {len(maps)} ')
+print_map(maps)
 
-G1 = kt.KappaComplex('A(x[1],y[2]), A(x[1],y[3]), C(x[2]), C(x[3]{p})')
-G2 = kt.KappaComplex('A(x[1],y[2]), A(x[1],y[3]), C(x[2]), C(x[3])')
-GM = km.GraphMatcher(G1, G2)
-print(f'G2 is embeddable in G1: {GM.embed(test="embed")}')
-print(f'G1 and G2 are isomorphic: {GM.embed(test="iso")}')
-GM = km.SiteGraphMatcher(G1, G2)
-print(f'G2 is embeddable in G1: {GM.embed()}')
-
-G1 = kt.KappaComplex('A(b[1] a[2]), A(b[3] a[2]), B(a[1] x{p}), B(a[3] x{u})')
-G2 = kt.KappaComplex('A(b[2]), B(a[2] x)')
-maps = km.all_embeddings(G1, G2, algo="graph")
-print(f'number of embeddings from G2 into G1: {len(maps)}')
-km.print_map(maps)
-maps = km.all_embeddings(G1, G2, algo="sitegraph")
-print(f'number of embeddings from G2 into G1: {len(maps)}')
-km.print_map(maps)
+# input a file containing one (large) Kappa string
+line = open('TestData/bigly.ka', 'r').read()
+# remove newlines that might occur in the file
+line = re.sub(r'\n+', ' ', line)
+# create a KappaComplex with whatever assignment of node identifiers arises
+# (that's the normalize=False flag).
+G1 = kt.KappaComplex(line, normalize=False)
+G2 = kt.KappaComplex(line, normalize=True)
+G2.show()
+print(f'VF2: G1 and G2 are isomorphic: {GM.isomorphic_vf2(G1, G2)}')
+print(f'rigid: G1 and G2 are isomorphic: {SGM.isomorphic(G1, G2)}')
+if GM.mapping == SGM.mapping:
+    print("Great!")
+print_map([GM.mapping])
 ```

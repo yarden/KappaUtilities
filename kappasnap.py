@@ -1,4 +1,5 @@
 import kappathings as kt
+import kappy
 import re
 import gzip
 import json
@@ -18,7 +19,7 @@ class SnapShot:
             print(c)
     """
 
-    def __init__(self, file):
+    def __init__(self, file, use_kappy=False):
         self.file = file
         self.time = 0.
         self.event = 0
@@ -26,9 +27,9 @@ class SnapShot:
         self.complex = []  # list of 'KappaComplex'es
 
         if self.file.endswith(".json") or self.file.endswith(".json.gz"):
-            S = JsonSnapShot(file)
+            S = JsonSnapShot(file, use_kappy=use_kappy)
         elif self.file.endswith(".ka"):
-            S = KappaSnapShot(file)
+            S = KappaSnapShot(file, use_kappy=use_kappy)
         else:
             raise Exception("Unknown file extension %s" % self.file)
         self.time = S.time
@@ -53,8 +54,9 @@ class SnapShot:
 
 
 class KappaSnapShot:
-    def __init__(self, kappa_file):
+    def __init__(self, kappa_file, use_kappy):
         self.data = None
+        self.use_kappy = use_kappy
         self.currentline = ''
         self.kappa_file = kappa_file
         self.time = 0.
@@ -85,10 +87,14 @@ class KappaSnapShot:
                     entry = self.next_complex_from_file()
                     if not entry:
                         break
-                    # parse the entry
-                    match = re.findall(r'%init: (.*?) \/\*(.*?) agents\*\/ (.*?)$', entry)[0]
-                    # build the internal representation
-                    komplex = kt.KappaComplex(match[2].strip(), count=int(match[0]))
+                    if self.use_kappy:
+                        komplex = kappy.KappaComplex.from_string(entry)
+                    else:
+                        # DIY...
+                        # parse the entry
+                        match = re.findall(r'%init: (.*?) \/\*(.*?) agents\*\/ (.*?)$', entry)[0]
+                        # build the internal representation
+                        komplex = kt.KappaComplex(match[2].strip(), count=int(match[0]))
                     self.complex.append(komplex)
             self.number_of_distinct_complexes = len(self.complex)
 
@@ -111,7 +117,7 @@ class KappaSnapShot:
 
 
 class JsonSnapShot:
-    def __init__(self, json_file):
+    def __init__(self, json_file, use_kappy):
         """
         :param json_file (type string): snapshot file in JSON format
 
@@ -151,6 +157,7 @@ class JsonSnapShot:
             self.get_size_distribution
         """
         self.json_file = json_file
+        self.use_kappy = use_kappy
         self.snap_name = None  # this is the internal name of the snapshot
         self.data = None
         self.time = 0.
@@ -208,7 +215,11 @@ class JsonSnapShot:
             # here a list of lists (ugh..) -YK
             if type(comp_info[0]) != list:
                 comp_info = [comp_info]
-            komplex = kt.KappaComplex(comp_info[0], count=c[0])
+            if self.use_kappy:
+                komplex = kappy.KappaComplex.from_string(comp_info[0])
+            else:
+                # DYI...
+                komplex = kt.KappaComplex(comp_info[0], count=c[0])
             self.complex.append(komplex)
 
 
@@ -223,57 +234,54 @@ if __name__ == '__main__':
     # Yarden tests (these take 10 minutes for rigid and 43 minutes for VF2)
 
     snap1_obj = SnapShot('TestData/snap_large.ka')
-    snap2_obj = SnapShot('TestData/snap_large.ka')
     snap1_size = len(snap1_obj.complex)
-    snap2_size = len(snap2_obj.complex)
 
     intersection = []
+    SGM = km.SiteGraphMatcher()
     for complex1 in snap1_obj.complex:
-        for complex2 in snap2_obj.complex:
-            if km.isomorphic(complex1, complex2):
+        for complex2 in snap1_obj.complex:
+            if SGM.isomorphic(complex1, complex2):
                 intersection.append(complex1)
                 break
     print(f'size of intersection: {len(intersection)}')
-    print(intersection)
 
-    intersection_vf = []
-    for complex1 in snap1_obj.complex:
-        for complex2 in snap2_obj.complex:
-            if km.isomorphic_vf2(complex1, complex2):
-                intersection_vf.append(complex1)
-                break
-    print(f'size of intersection: {len(intersection_vf)}')
-    print(intersection_vf)
-
+    # intersection_vf = []
+    # for complex1 in snap1_obj.complex:
+    #     for complex2 in snap2_obj.complex:
+    #         if km.isomorphic_vf2(complex1, complex2):
+    #             intersection_vf.append(complex1)
+    #             break
+    # print(f'size of intersection: {len(intersection_vf)}')
+    # print(f'intersections are equal: {intersection == intersection_vf}')
 
     # usage scenarios
 
-    print('from Kappa')
-    snapshot1 = SnapShot('TestData/snap.ka')
-    print(f'{snapshot1.number_of_distinct_complexes} complexes')
-    for c in snapshot1.complex:
-        print(c)
-
-    print('from JSON')
-    snapshot2 = SnapShot('TestData/snap.json')
-    print(f'{snapshot2.number_of_distinct_complexes} complexes')
-    for c in snapshot2.complex:
-        print(c)
-
-    print('large file')
-    snapshot = SnapShot('TestData/snap_large.ka')
-    print(f'{snapshot.number_of_distinct_complexes} complexes')
-    max = 10
-    i = 0
-    while True:
-        print(snapshot.complex[i])
-        i += 1
-        if i == max:
-            break
-
-    # size distribution
-    dist = snapshot.get_size_distribution()
-    for item in dist:
-        print(f'size: {item[0]}   count: {item[1]}')
-    # viz.show_ranked_complexes(snapshot, prog='sfdp', sort='size', cutoff=4, cols=2, rows=2, node_size=20, font_size=4)
-    # viz.show_ranked_complexes(snapshot, sort='count', cutoff=4, cols=2, rows=2, node_size=20)
+    # print('from Kappa')
+    # snapshot1 = SnapShot('TestData/snap.ka')
+    # print(f'{snapshot1.number_of_distinct_complexes} complexes')
+    # for c in snapshot1.complex:
+    #     print(c)
+    #
+    # print('from JSON')
+    # snapshot2 = SnapShot('TestData/snap.json')
+    # print(f'{snapshot2.number_of_distinct_complexes} complexes')
+    # for c in snapshot2.complex:
+    #     print(c)
+    #
+    # print('large file')
+    # snapshot = SnapShot('TestData/snap_large.ka')
+    # print(f'{snapshot.number_of_distinct_complexes} complexes')
+    # max = 10
+    # i = 0
+    # while True:
+    #     print(snapshot.complex[i])
+    #     i += 1
+    #     if i == max:
+    #         break
+    #
+    # # size distribution
+    # dist = snapshot.get_size_distribution()
+    # for item in dist:
+    #     print(f'size: {item[0]}   count: {item[1]}')
+    # # viz.show_ranked_complexes(snapshot, prog='sfdp', sort='size', cutoff=4, cols=2, rows=2, node_size=20, font_size=4)
+    # # viz.show_ranked_complexes(snapshot, sort='count', cutoff=4, cols=2, rows=2, node_size=20)

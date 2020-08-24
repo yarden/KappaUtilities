@@ -24,93 +24,13 @@ def print_map(maps):
             print(f'{k} --> {v}')
 
 
-def isomorphic(host, pattern):
-    return SiteGraphMatcher(host, pattern).embed(test='iso')
-
-
-def all_embeddings(host, pattern):
-    rarest_pattern_type = next(iter(pattern.composition))
-    roots = [node for node in host.name_list if host.info[node]['type'] == rarest_pattern_type]
-
-    mappings = []
-    for start in roots:
-        GM = SiteGraphMatcher(host, pattern, h_start=start)
-        if GM.embed():
-            # sort sensibly for readability
-            GM.mapping = {k: v for k, v in sorted(GM.mapping.items(), key=lambda x: x[0])}
-            # the rigidity approach never produces identical embeddings
-            mappings += [GM.mapping]
-    return mappings
-
-
-def isomorphic_vf2(host, pattern):
-    # get the number of bonds between any two agents;
-    if not host.nbonds:
-        host.get_bond_numbers()
-    if not pattern.nbonds:
-        pattern.get_bond_numbers()
-    return GraphMatcher(host, pattern).embed(test='iso')
-
-
-def all_embeddings_vf2(host, pattern):
-    # set recursion limit.
-    old_recursion_limit = sys.getrecursionlimit()
-    expected_max_recursion_level = pattern.size
-    if old_recursion_limit < 1.5 * expected_max_recursion_level:
-        # Give some breathing room.
-        sys.setrecursionlimit(int(1.5 * expected_max_recursion_level))
-
-    rarest_pattern_type = next(iter(pattern.composition))
-    if rarest_pattern_type not in host.composition.keys():
-        return []
-    else:
-        abundance = host.composition[rarest_pattern_type]
-
-    names = list(map(lambda name: name.split(host.idsep[0])[0], host.name_list))
-    host_name_list_saved = host.name_list
-    host.name_list = kt.shift(host.name_list, names.index(rarest_pattern_type))
-
-    # get the number of bonds between any two agents;
-    if not host.nbonds:
-        host.get_bond_numbers()
-    if not pattern.nbonds:
-        pattern.get_bond_numbers()
-
-    mappings = []
-    m = 0
-    for i in range(0, abundance):
-        GM = GraphMatcher(host, pattern)
-        if GM.embed():
-            # eliminate identical embeddings
-            found = False
-            for j in range(0, m):
-                if GM.mapping == mappings[j]:  # not the fastest way...
-                    found = True
-                    break
-            if not found:
-                mappings += [GM.mapping]
-                m += 1
-        # else:
-        #     break
-        if i < abundance - 1:
-            host.name_list = kt.shift(host.name_list)
-
-    # restore recursion limit
-    sys.setrecursionlimit(old_recursion_limit)
-
-    # restore host name list
-    host.name_list = host_name_list_saved
-
-    return mappings
-
-
 class GraphMatcher:
     """
     Implementation of VF2 algorithm for matching undirected graphs.
     Does not handle multi-graphs.
     """
 
-    def __init__(self, G1, G2):
+    def __init__(self):
         """
         Initialize GraphMatcher.
         Parameters
@@ -119,17 +39,18 @@ class GraphMatcher:
         The two graphs to check for isomorphism or for an embedding of G2 (pattern) into G1 (host).
         :param test: either 'embed' (default) or 'iso'
         """
-        self.G1 = G1
-        self.G2 = G2
-        self.G1_nodes = set(G1.nodes())
-        self.G2_nodes = set(G2.nodes())
-        self.G2_node_order = {n: i for i, n in enumerate(G2.name_list)}
-
-        # default: Declare that we will be searching for a graph-graph isomorphism.
-        self.test = None
-
-        # Initialize state
-        self.initialize()
+        self.G1 = None
+        self.G2 = None
+        self.G1_nodes = set()
+        self.G2_nodes = set()
+        self.G2_node_order = {}
+        self.test = 'embed'
+        self.core_1 = {}
+        self.core_2 = {}
+        self.inout_1 = {}
+        self.inout_2 = {}
+        self.state = None
+        self.mapping = {}
 
     def initialize(self):
         """Reinitializes the state of the algorithm.
@@ -160,14 +81,69 @@ class GraphMatcher:
         # Provide a convenient way to access the isomorphism mapping.
         self.mapping = self.core_1.copy()
 
-    def embed(self, test='embed'):
+    def isomorphic_vf2(self, G1, G2):
+        # get the number of bonds between any two agents;
+        if not G1.nbonds:
+            G1.get_bond_numbers()
+        if not G2.nbonds:
+            G2.get_bond_numbers()
+        return self.embed_vf2(G1, G2, test='iso')
+
+    def all_embeddings_vf2(self, host, pattern):
+        rarest_pattern_type = next(iter(pattern.composition))
+        if rarest_pattern_type not in host.composition.keys():
+            return []
+        else:
+            abundance = host.composition[rarest_pattern_type]
+
+        names = list(map(lambda name: name.split(host.idsep[0])[0], host.name_list))
+        host_name_list_saved = host.name_list
+        host.name_list = kt.shift(host.name_list, names.index(rarest_pattern_type))
+
+        # get the number of bonds between any two agents;
+        if not host.nbonds:
+            host.get_bond_numbers()
+        if not pattern.nbonds:
+            pattern.get_bond_numbers()
+
+        mappings = []
+        m = 0
+        for i in range(0, abundance):
+            if self.embed_vf2(host, pattern):
+                # eliminate identical embeddings
+                found = False
+                for j in range(0, m):
+                    if self.mapping == mappings[j]:  # not the fastest way...
+                        found = True
+                        break
+                if not found:
+                    mappings += [self.mapping]
+                    m += 1
+            # else:
+            #     break
+            if i < abundance - 1:
+                host.name_list = kt.shift(host.name_list)
+
+        # restore host name list
+        host.name_list = host_name_list_saved
+
+        return mappings
+
+    def embed_vf2(self, G1, G2, test='embed'):
         """
         Returns True if G2 can be embedded in G1.
         The embedding is in GM.mapping
         :param test: 'embed' (default) or 'iso'
         """
-
+        self.G1 = G1
+        self.G2 = G2
+        self.G1_nodes = set(G1.nodes())
+        self.G2_nodes = set(G2.nodes())
+        self.G2_node_order = {n: i for i, n in enumerate(G2.name_list)}
         self.test = test
+
+        # Initialize state
+        self.initialize()
 
         if self.test == 'embed':
             # Check size
@@ -186,11 +162,11 @@ class GraphMatcher:
             # Check composition
             if self.G1.sum_formula != self.G2.sum_formula:
                 return False
-            # Check local properties
-            d1 = sorted(d for n, d in self.G1.degree())
-            d2 = sorted(d for n, d in self.G2.degree())
-            if d1 != d2:
-                return False
+            # Check local properties; turned off because of overhead
+            # d1 = sorted(d for n, d in self.G1.degree())
+            # d2 = sorted(d for n, d in self.G2.degree())
+            # if d1 != d2:
+            #     return False
         else:
             print(f'unknown match request: {self.test}')
             exit()
@@ -558,6 +534,12 @@ class GMState:
 class Fail(Exception):
     pass
 
+# In the following implementation, speed-ups were achieved by
+# * avoiding assignment of host and pattern graphs (not sure why that has an effect)
+# * turning off degree checking as preflight
+# * avoiding creating a new SiteGraphMatcher object at each comparison in all_embeddings
+#   (hence all matching functions are now methods of the matcher object)
+
 
 class SiteGraphMatcher:
     """
@@ -565,48 +547,69 @@ class SiteGraphMatcher:
     Does handle multi-graphs, but not graphs with multiple disconnected components.
     """
 
-    def __init__(self, host, pattern, h_start=None):
-        self.pattern = pattern
-        self.host = host
-        self.p_start = self.pattern.name_list[0]
+    def __init__(self):
+        self.pattern = ''
+        self.host = ''
+        self.p_start = ''
+        self.h_start = ''
+        self.mapping = {}
+
+    def isomorphic(self, host, pattern):
+        return self.embed(host, pattern, test='iso')
+
+    def all_embeddings(self, host, pattern):
+        rarest_pattern_type = next(iter(pattern.composition))
+        roots = [node for node in host.name_list if host.info[node]['type'] == rarest_pattern_type]
+
+        mappings = []
+        for start in roots:
+            if self.embed(host, pattern, h_start=start):
+                # sort sensibly for readability
+                self.mapping = {k: v for k, v in sorted(self.mapping.items(), key=lambda x: x[0])}
+                # the rigidity approach never produces identical embeddings
+                mappings += [self.mapping]
+        return mappings
+
+    def embed(self, host, pattern, test='embed', h_start=None):
+
+        self.p_start = pattern.name_list[0]
         if not h_start:
-            self.h_start = self.host.name_list[0]
+            self.h_start = host.name_list[0]
         else:
             self.h_start = h_start
         self.mapping = {}
 
-    def embed(self, test='embed'):
-
         if test == 'embed':
             # Check size
-            if self.host.size < self.pattern.size:
+            if host.size < pattern.size:
                 return False
             # Check composition
-            for node_type in self.pattern.composition:
-                if node_type not in self.host.composition.keys():
+            for node_type in pattern.composition:
+                if node_type not in host.composition.keys():
                     return False
-                if self.host.composition[node_type] < self.pattern.composition[node_type]:
+                if host.composition[node_type] < pattern.composition[node_type]:
                     return False
         elif test == 'iso':
             # Check size
-            if self.host.size != self.pattern.size:
+            if host.size != pattern.size:
                 return False
             # Check composition
-            if self.host.sum_formula != self.pattern.sum_formula:
+            if host.sum_formula != pattern.sum_formula:
                 return False
-            # Check local properties
-            d1 = sorted(d for n, d in self.host.degree())
-            d2 = sorted(d for n, d in self.pattern.degree())
-            if d1 != d2:
-                return False
+            # Check local properties; turned off because of overhead
+            # d1 = sorted(d for n, d in host.degree())
+            # d2 = sorted(d for n, d in pattern.degree())
+            # if d1 != d2:
+            #     return False
 
+        # Go!
         try:
-            self.traverse(self.p_start, self.h_start)
+            self.traverse(host, pattern, self.p_start, self.h_start)
             return True
         except Fail:
             return False
 
-    def traverse(self, p_node, h_node):
+    def traverse(self, host, pattern, p_node, h_node):
         # sans recursion
         stack = deque()
         visited = set()
@@ -617,16 +620,16 @@ class SiteGraphMatcher:
             if p_node not in visited:
                 if parent_p_node:
                     # the site at which we left the last pattern node to reach the current pattern node
-                    site = self.pattern.navigation[(parent_p_node, p_node)]
+                    site = pattern.navigation[(parent_p_node, p_node)]
                     # the agent that is bound on that site but in the host graph
                     # (it doesn't matter if there are multiple bonds between two nodes; all we care about
                     # is reaching the node in host that must be matched against the node in pattern.)
-                    h_node, x, x = self.host.agents[h_node][site]['bond'].partition(self.pattern.bondsep)
-                if self.node_match(h_node, p_node):
+                    h_node, x, x = host.agents[h_node][site]['bond'].partition(pattern.bondsep)
+                if self.node_match(host, pattern, h_node, p_node):
                     # update the mapping
                     self.mapping[p_node] = h_node
                     visited.add(p_node)
-                    for neighbor in self.pattern[p_node]:
+                    for neighbor in pattern[p_node]:
                         # stack the neighbors
                         stack.append((neighbor, p_node, h_node))
                 else:
@@ -654,15 +657,15 @@ class SiteGraphMatcher:
     #                 self.traverse_with_recursion(neighbor, h_node)
     #         self.stack.pop()
 
-    def node_match(self, h_node, p_node):
+    def node_match(self, host, pattern, h_node, p_node):
         # type match
-        h_node_type = self.host.info[h_node]['type']
-        p_node_type = self.pattern.info[p_node]['type']
+        h_node_type = host.info[h_node]['type']
+        p_node_type = pattern.info[p_node]['type']
         if h_node_type != p_node_type:
             return False
 
-        h_node_iface = self.host.agents[h_node]
-        p_node_iface = self.pattern.agents[p_node]
+        h_node_iface = host.agents[h_node]
+        p_node_iface = pattern.agents[p_node]
 
         for site_name in p_node_iface:
             if site_name not in h_node_iface:
@@ -675,9 +678,9 @@ class SiteGraphMatcher:
                 h_bond = h_node_iface[site_name]['bond']
                 p_bond = p_node_iface[site_name]['bond']
                 if '@' in h_bond:
-                    h_partner, x, h_site = h_bond.partition(self.host.bondsep)
+                    h_partner, x, h_site = h_bond.partition(host.bondsep)
                 if '@' in p_bond:
-                    p_partner, x, p_site = p_bond.partition(self.pattern.bondsep)
+                    p_partner, x, p_site = p_bond.partition(pattern.bondsep)
 
                 if p_bond == '.':
                     if h_bond != '.':
@@ -722,10 +725,12 @@ if __name__ == '__main__':
     G2 = kt.KappaComplex('A(b[2]), B(a[2] x{u})', normalize=False)
     G1.show()
     G2.show()
-    maps = all_embeddings_vf2(G1, G2)
+    GM = GraphMatcher()
+    SGM = SiteGraphMatcher()
+    maps = GM.all_embeddings_vf2(G1, G2)
     print(f'VF2: number of embeddings of G2 into G1: {len(maps)} ')
     print_map(maps)
-    maps = all_embeddings(G1, G2)
+    maps = SGM.all_embeddings(G1, G2)
     print(f'rigid: number of embeddings of G2 into G1: {len(maps)} ')
     print_map(maps)
 
@@ -738,13 +743,9 @@ if __name__ == '__main__':
     G1 = kt.KappaComplex(line, normalize=False)
     G2 = kt.KappaComplex(line, normalize=True)
     G2.show()
-    GM = GraphMatcher(G1, G2)
-    print(f'VF2: G1 and G2 are isomorphic: {GM.embed(test="iso")}')
-    map1 = GM.mapping
-    GM = SiteGraphMatcher(G1, G2)
-    print(f'rigid: G1 and G2 are isomorphic: {GM.embed()}')
-    map2 = GM.mapping
-    if map1 == map2:
+    print(f'VF2: G1 and G2 are isomorphic: {GM.isomorphic_vf2(G1, G2)}')
+    print(f'rigid: G1 and G2 are isomorphic: {SGM.isomorphic(G1, G2)}')
+    if GM.mapping == SGM.mapping:
         print("Great!")
     print_map([GM.mapping])
 
@@ -752,7 +753,7 @@ if __name__ == '__main__':
     for i in range(0, 10):
         # randomly permute identifiers:
         G2 = kt.KappaComplex('A(x[1],y[2]), B(x[2],y[3]), C(x[3],y[1])', randomize=True)
-        print(f'VF2: G1 and G2 are isomorphic: {isomorphic_vf2(G1, G2)}')
+        print(f'VF2: G1 and G2 are isomorphic: {GM.isomorphic_vf2(G1, G2)}')
     print('')
 
     G1 = kt.KappaComplex('A(x[1],y[2]), B(x[2],y[3]), C(x[3],y[1])', randomize=True)
@@ -761,8 +762,8 @@ if __name__ == '__main__':
     G1.show()
     print('G2:')
     G2.show()
-    print(f'VF2: G1 and G2 are isomorphic: {isomorphic_vf2(G1, G2)}')
-    print(f'VF2: G2 is embeddable in G1: {all_embeddings_vf2(G1, G2)}')
+    print(f'VF2: G1 and G2 are isomorphic: {GM.isomorphic_vf2(G1, G2)}')
+    print(f'VF2: G2 is embeddable in G1: {GM.all_embeddings_vf2(G1, G2)}')
 
     G1 = kt.KappaComplex('A(x[1],y[2]), A(x[1],y[3]), C(x[2]), C(x[3]{p})', normalize=False)
     G2 = kt.KappaComplex('A(x[1],y[2]), A(x[1],y[3]), C(x[2]), C(x[3])', normalize=False)
@@ -770,9 +771,9 @@ if __name__ == '__main__':
     G1.show()
     print('G2:')
     G2.show()
-    print(f'VF2: G2 is embeddable in G1: {all_embeddings_vf2(G1, G2)}')
+    print(f'VF2: G2 is embeddable in G1: {GM.all_embeddings_vf2(G1, G2)}')
     G2.name_list = kt.shift(G2.name_list)
-    print(f'VF2: G1 and G2 are isomorphic: {isomorphic_vf2(G1, G2)}')
+    print(f'VF2: G1 and G2 are isomorphic: {GM.isomorphic_vf2(G1, G2)}')
 
     G1 = kt.KappaComplex('A(x[.] y[2]), A(x[2] y[3]), A(x[3] y[4]), A(x[4] y[1]), B(x[1])')
     G2 = kt.KappaComplex('A(x y[2]), A(x[2] y)')
@@ -780,13 +781,13 @@ if __name__ == '__main__':
     G1.show()
     print('G2:')
     G2.show()
-    maps = all_embeddings(G1, G2)
+    maps = SGM.all_embeddings(G1, G2)
     print(f'rigid: number of embeddings from G2 into G1: {len(maps)} ')
     print_map(maps)
 
     G1 = kt.KappaComplex('A(b[1] a[2]), A(b[3] a[2]), B(a[1] x{p}), B(a[3] x{u})')
     G2 = kt.KappaComplex('A(b[2]), B(a[2] x)')
-    maps = all_embeddings(G1, G2)
+    maps = SGM.all_embeddings(G1, G2)
     print(f'rigid: number of embeddings of G2 into G1: {len(maps)} ')
     print_map(maps)
     #
@@ -794,10 +795,10 @@ if __name__ == '__main__':
     G2 = kt.KappaComplex('A(b[1]), A(b[1])')
     G1.show()
     G2.show()
-    maps = all_embeddings(G1, G2)
+    maps = SGM.all_embeddings(G1, G2)
     print(f'rigid: number of embeddings of G2 into G1: {len(maps)} ')
     print_map(maps)
-    maps = all_embeddings_vf2(G1, G2)
+    maps = GM.all_embeddings_vf2(G1, G2)
     print(f'VF2: number of embeddings of G2 into G1: {len(maps)} ')
     print_map(maps)
 
@@ -805,16 +806,16 @@ if __name__ == '__main__':
     G2 = kt.KappaComplex('A(a[1]), A(a[1])')
     G1.show()
     G2.show()
-    maps = all_embeddings(G1, G2)
+    maps = SGM.all_embeddings(G1, G2)
     print(f'rigid: number of embeddings of G2 into G1: {len(maps)} ')
     print_map(maps)
-    maps = all_embeddings_vf2(G1, G2)
+    maps = GM.all_embeddings_vf2(G1, G2)
     print(f'VF2: number of embeddings of G2 into G1: {len(maps)} ')
     print_map(maps)
     #
     G1 = kt.KappaComplex('A(x[1] y[2]), A(x[2] y[3]), A(x[3] y[4]]), A(x[4] y[1]})')
     G2 = kt.KappaComplex('A(x[1] y[2]), A(x[2] y[3]), A(x[3] y[4]]), A(x[4] y[1]})')
-    maps = all_embeddings(G1, G2)
+    maps = SGM.all_embeddings(G1, G2)
     print(f'rigid: number of embeddings of G2 into G1: {len(maps)}')
     print_map(maps)
 
@@ -826,6 +827,6 @@ if __name__ == '__main__':
     # end = time.process_time()
     # print(f'seconds: {end - start}')
     # start = time.process_time()
-    # print(isomorphic(c1, c1))
+    # print(SGM.isomorphic(c1, c1))
     # end = time.process_time()
     # print(f'seconds: {end - start}')
