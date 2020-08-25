@@ -69,6 +69,7 @@ class KappaComplex:
         self.is_pattern = False
         self.composition = {}
         self.sum_formula = ''
+        self.rarest_type = ''
 
         # data structures representing the complex; some redundancy here for convenience
         self.agents = {}
@@ -77,6 +78,7 @@ class KappaComplex:
         self.bonds = set()
         self.nbonds = {}   # nbonds[(a1, a2)] = n of bonds between a1 and a2 for a1 <= a2
         self.name_list = []
+        self.type_slice = {}  # dict of pairs
         self.navigation = {}
 
         # auxiliary variables
@@ -114,9 +116,16 @@ class KappaComplex:
         self.name_list = [k for k in self.agents]
         # get the composition
         self.get_composition()
+        self.rarest_type = next(iter(self.composition))
         # sort name list by rarity (primary) and type (secondary)
         self.name_list = sorted(self.name_list,
                                 key=lambda i: (self.composition[self.info[i]['type']], self.info[i]['type']))
+        # get the slice indices for each type in the sorted name_list
+        start = 0
+        for a_type in self.composition.keys():
+            abundance = self.composition[a_type]
+            self.type_slice[a_type] = (start, start + abundance)
+            start += abundance
 
         if randomize:
             # this is to re-index the same complex in different ways;
@@ -426,18 +435,18 @@ class KappaComplex:
         """
         comp = {}
         for a in self.agents:
-            type = self.info[a]['type']
-            if type in comp.keys():
-                comp[type] += 1
+            a_type = self.info[a]['type']
+            if a_type in comp.keys():
+                comp[a_type] += 1
             else:
-                comp[type] = 1
+                comp[a_type] = 1
 
-        # sort the dict by value (!) and then key:
-        self.composition = {k: v for k, v in sorted(comp.items(), key=lambda item: (item[1], item[0]), reverse=False)}
+        # sort the dict by value and then key:
+        self.composition = {k: v for k, v in sorted(comp.items(), key=lambda item: (item[1], item[0]))}
 
         self.sum_formula = ''
-        for type in self.composition.keys():
-            self.sum_formula += (type + '{' + str(self.composition[type]) + '}')
+        for a_type in self.composition.keys():
+            self.sum_formula += (a_type + '{' + str(self.composition[a_type]) + '}')
 
     def is_multigraph(self):
         """
@@ -629,6 +638,12 @@ if __name__ == '__main__':
     # testing __iter__ and __getitem__ methods
     for n in c3:
         print(f'adjacency of {n}: {c3[n]}')
+    print('')
+    print(c3.sum_formula)
+    print(c3.type_slice)
+    for a_type in c3.type_slice.keys():
+        (start, stop) = c3.type_slice[a_type]
+        print(c3.name_list[start:stop])
 
     # print("big stuff from file:")
     # line = open('TestData/monster.ka', 'r').read()

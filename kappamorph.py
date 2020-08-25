@@ -90,15 +90,13 @@ class GraphMatcher:
         return self.embed_vf2(G1, G2, test='iso')
 
     def all_embeddings_vf2(self, host, pattern):
-        rarest_pattern_type = next(iter(pattern.composition))
-        if rarest_pattern_type not in host.composition.keys():
+        if pattern.rarest_type not in host.composition.keys():
             return []
         else:
-            abundance = host.composition[rarest_pattern_type]
+            abundance = host.composition[pattern.rarest_type]
 
-        names = list(map(lambda name: name.split(host.idsep[0])[0], host.name_list))
-        host_name_list_saved = host.name_list
-        host.name_list = kt.shift(host.name_list, names.index(rarest_pattern_type))
+        host_name_list_orig = host.name_list
+        host.name_list = kt.shift(host.name_list, host.type_slice[pattern.rarest_type][0])
 
         # get the number of bonds between any two agents;
         if not host.nbonds:
@@ -125,7 +123,7 @@ class GraphMatcher:
                 host.name_list = kt.shift(host.name_list)
 
         # restore host name list
-        host.name_list = host_name_list_saved
+        host.name_list = host_name_list_orig
 
         return mappings
 
@@ -553,37 +551,78 @@ class SiteGraphMatcher:
         self.mapping = {}
 
     def isomorphic(self, host, pattern):
-        return self.morphism(host, pattern, 'iso')
+        # Check size
+        if host.size != pattern.size:
+            return False
+        # Check composition
+        if host.sum_formula != pattern.sum_formula:
+            return False
+        # Check local properties; turned off because of overhead
+        # d1 = sorted(d for n, d in host.degree())
+        # d2 = sorted(d for n, d in pattern.degree())
+        # if d1 != d2:
+        #     return False
+        return self.morphism(host, pattern)
+
+    def isomorphic_unsafe(self, host, pattern, h_start, p_start):
+        # Check size
+        if host.size != pattern.size:
+            return False
+        # Check composition
+        if host.sum_formula != pattern.sum_formula:
+            return False
+        # Check local properties; turned off because of overhead
+        # d1 = sorted(d for n, d in host.degree())
+        # d2 = sorted(d for n, d in pattern.degree())
+        # if d1 != d2:
+        #     return False
+        return self._embed(host, pattern, h_start=h_start, p_start=p_start)
 
     def embed(self, host, pattern):
-        return self.morphism(host, pattern, 'embed')
+        # Check size
+        if host.size < pattern.size:
+            return False
+        # Check composition
+        for node_type in pattern.composition:
+            if node_type not in host.composition.keys():
+                return False
+            if host.composition[node_type] < pattern.composition[node_type]:
+                return False
+        return self.morphism(host, pattern)
 
-    def morphism(self, host, pattern, test):
-        rarest_pattern_type = next(iter(pattern.composition))
-        roots = [node for node in host.name_list if host.info[node]['type'] == rarest_pattern_type]
+    def morphism(self, host, pattern):
+        start, stop = host.type_slice[pattern.rarest_type]
+        roots = host.name_list[start:stop]
 
-        for start in roots:
-            if self._embed(host, pattern, h_start=start, test=test):
+        for node in roots:
+            if self._embed(host, pattern, h_start=node):
                 return True
         return False
 
-    def isomorphic_unsafe(self, host, pattern, h_start, p_start):
-        return self._embed(host, pattern, h_start=h_start, p_start=p_start, test='iso')
-
     def all_embeddings(self, host, pattern):
-        rarest_pattern_type = next(iter(pattern.composition))
-        roots = [node for node in host.name_list if host.info[node]['type'] == rarest_pattern_type]
+        # Check size
+        if host.size < pattern.size:
+            return False
+        # Check composition
+        for node_type in pattern.composition:
+            if node_type not in host.composition.keys():
+                return False
+            if host.composition[node_type] < pattern.composition[node_type]:
+                return False
+
+        start, stop = host.type_slice[pattern.rarest_type]
+        roots = host.name_list[start:stop]
 
         mappings = []
-        for start in roots:
-            if self._embed(host, pattern, h_start=start):
+        for node in roots:
+            if self._embed(host, pattern, h_start=node):
                 # sort sensibly for readability
                 self.mapping = {k: v for k, v in sorted(self.mapping.items(), key=lambda x: x[0])}
                 # the rigidity approach never produces identical embeddings
                 mappings += [self.mapping]
         return mappings
 
-    def _embed(self, host, pattern, test='embed', p_start=None, h_start=None):
+    def _embed(self, host, pattern, p_start=None, h_start=None):
 
         if not p_start:
             self.p_start = pattern.name_list[0]
@@ -595,30 +634,6 @@ class SiteGraphMatcher:
             self.h_start = h_start
         self.mapping = {}
 
-        if test == 'embed':
-            # Check size
-            if host.size < pattern.size:
-                return False
-            # Check composition
-            for node_type in pattern.composition:
-                if node_type not in host.composition.keys():
-                    return False
-                if host.composition[node_type] < pattern.composition[node_type]:
-                    return False
-        elif test == 'iso':
-            # Check size
-            if host.size != pattern.size:
-                return False
-            # Check composition
-            if host.sum_formula != pattern.sum_formula:
-                return False
-            # Check local properties; turned off because of overhead
-            # d1 = sorted(d for n, d in host.degree())
-            # d2 = sorted(d for n, d in pattern.degree())
-            # if d1 != d2:
-            #     return False
-
-        # Go!
         try:
             self.traverse(host, pattern, self.p_start, self.h_start)
             return True
