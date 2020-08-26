@@ -592,9 +592,7 @@ class SiteGraphMatcher:
 
     def morphism(self, host, pattern):
         start, stop = host.type_slice[pattern.rarest_type]
-        roots = host.name_list[start:stop]
-
-        for node in roots:
+        for node in host.name_list[start:stop]:
             if self._embed(host, pattern, h_start=node):
                 return True
         return False
@@ -611,10 +609,8 @@ class SiteGraphMatcher:
                 return False
 
         start, stop = host.type_slice[pattern.rarest_type]
-        roots = host.name_list[start:stop]
-
         mappings = []
-        for node in roots:
+        for node in host.name_list[start:stop]:
             if self._embed(host, pattern, h_start=node):
                 # sort sensibly for readability
                 self.mapping = {k: v for k, v in sorted(self.mapping.items(), key=lambda x: x[0])}
