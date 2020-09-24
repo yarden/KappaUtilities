@@ -4,6 +4,7 @@ import re
 import gzip
 import json
 import os
+import sys
 
 
 class SnapShot:
@@ -24,7 +25,7 @@ class SnapShot:
         self.time = 0.
         self.event = 0
         self.number_of_distinct_complexes = 0
-        self.complex = []  # list of 'KappaComplex'es
+        self.complexes = []  # list of 'KappaComplex'es
 
         if self.file.endswith(".json") or self.file.endswith(".json.gz"):
             S = JsonSnapShot(file, use_kappy=use_kappy)
@@ -35,9 +36,9 @@ class SnapShot:
         self.time = S.time
         self.event = S.event
         self.number_of_distinct_complexes = S.number_of_distinct_complexes
-        self.complex = S.complex
+        self.complexes = S.complexes
 
-    def get_size_distribution(self):
+    def get_size_distribution(self, dictionary=False):
         """
         Generates the size distribution present in the snapshot
 
@@ -45,24 +46,34 @@ class SnapShot:
                  eg. [(1, 8583), (2, 2642), (7, 836), (4, 253), (103, 82)]
         """
         length = {}
-        for c in self.complex:
+        for c in self.complexes:
             if c.size in length.keys():
                 length[c.size] += c.count
             else:
                 length[c.size] = c.count
-        return [(l, c) for l, c in sorted(length.items(), key=lambda i: i[0], reverse=False)]
+
+        if dictionary:
+            d = {'length': [], 'count': []}
+            for l, c in sorted(length.items(), key=lambda i: i[0], reverse=False):
+                d['length'].append(l)
+                d['count'].append(c)
+            return d
+        else:
+            return [(l, c) for l, c in sorted(length.items(), key=lambda i: i[0], reverse=False)]
 
 
 class KappaSnapShot:
     def __init__(self, kappa_file, use_kappy):
+        # aux vars
         self.data = None
         self.use_kappy = use_kappy
-        self.currentline = ''
+        self.current_line = ''
+
         self.kappa_file = kappa_file
         self.time = 0.
         self.event = 0
         self.number_of_distinct_complexes = 0
-        self.complex = []  # list of 'KappaComplex'es
+        self.complexes = []  # list of 'KappaComplex'es
 
         self.load_and_unpack()
         self.data = None  # clear
@@ -81,36 +92,38 @@ class KappaSnapShot:
                 t = data.readline().split('T0')[1][:-2]
                 self.time = float(re.sub(r'"', ' ', t).strip())
                 data.readline()
-                self.currentline = data.readline()[:-1]  # this should be the first line of the first complex
+                self.current_line = data.readline()[:-1]  # this should be the first line of the first complex
 
                 while True:
                     entry = self.next_complex_from_file()
                     if not entry:
                         break
                     if self.use_kappy:
-                        komplex = kappy.KappaComplex.from_string(entry)
+                        komplex = None # until we can repair this
+                        sys.exit('Avoid kappy for now')
+                        # komplex = kappy.KappaComplex.from_string(entry)
                     else:
                         # DIY...
                         # parse the entry
                         match = re.findall(r'%init: (.*?) \/\*(.*?) agents\*\/ (.*?)$', entry)[0]
                         # build the internal representation
                         komplex = kt.KappaComplex(match[2].strip(), count=int(match[0]))
-                    self.complex.append(komplex)
-            self.number_of_distinct_complexes = len(self.complex)
+                    self.complexes.append(komplex)
+            self.number_of_distinct_complexes = len(self.complexes)
 
     def next_complex_from_file(self):
-        entry = self.currentline
+        entry = self.current_line
         line = ''
         while True:
             line = self.data.readline()
             if not line:
-                self.currentline = ''
+                self.current_line = ''
                 break
             elif '%init' in line:
                 if 'agents*/' in line:
-                    self.currentline = line[:-1]
+                    self.current_line = line[:-1]
                 else:
-                    self.currentline = ''
+                    self.current_line = ''
                 break
             entry = entry + line[:-1]  # remove \n
         return entry
@@ -163,7 +176,7 @@ class JsonSnapShot:
         self.time = 0.
         self.event = 0
         self.number_of_distinct_complexes = 0
-        self.complex = []  # list of 'KappaComplex'es
+        self.complexes = []  # list of 'KappaComplex'es
 
         self.load()
         self.unpack()
@@ -216,11 +229,13 @@ class JsonSnapShot:
             if type(comp_info[0]) != list:
                 comp_info = [comp_info]
             if self.use_kappy:
-                komplex = kappy.KappaComplex.from_string(comp_info[0])
+                komplex = None # until we can repair this
+                sys.exit('Avoid kappy for now')
+                # komplex = kappy.KappaComplex.from_string(comp_info[0])
             else:
                 # DYI...
                 komplex = kt.KappaComplex(comp_info[0], count=c[0])
-            self.complex.append(komplex)
+            self.complexes.append(komplex)
 
 
 # -----------------------------------------------------------------
@@ -234,12 +249,12 @@ if __name__ == '__main__':
     # Yarden tests (these take 10 minutes for rigid and 43 minutes for VF2)
 
     snap1_obj = SnapShot('TestData/snap_large.ka')
-    snap1_size = len(snap1_obj.complex)
+    snap1_size = len(snap1_obj.complexes)
 
     intersection = []
     SGM = km.SiteGraphMatcher()
-    for complex1 in snap1_obj.complex:
-        for complex2 in snap1_obj.complex:
+    for complex1 in snap1_obj.complexes:
+        for complex2 in snap1_obj.complexes:
             if SGM.isomorphic(complex1, complex2):
                 intersection.append(complex1)
                 break
