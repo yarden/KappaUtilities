@@ -1,3 +1,5 @@
+# Walter Fontana at 29.06.2020
+
 import kappathings as kt
 import kappy
 import re

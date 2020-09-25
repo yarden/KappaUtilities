@@ -1,3 +1,5 @@
+# Walter Fontana at 20.09.2020
+
 import plotly.graph_objects as go
 import matplotlib.pyplot as plt
 

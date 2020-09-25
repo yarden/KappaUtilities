@@ -1,3 +1,5 @@
+# Walter Fontana at 15.09.2020
+
 import networkx as nx
 
 
@@ -109,6 +111,25 @@ def convert_multigraph_to_graph(nxG):
     return G, n
 
 
+def delete_edgelists(nxG, edge_list=[]):
+    # to unify handling, convert to a list of lists (such as coming from a cycle basis)
+    if not isinstance(edge_list[0], list):
+        edge_list = [edge_list]
+
+    newG = nxG.copy()
+    for list_of_edges in edge_list:
+        for e in list_of_edges:
+            newG.remove_edge(e[0], e[1])
+    return newG
+
+
+def delete_nodelist(nxG, node_list=[]):
+    newG = nxG.copy()
+    for node in node_list:
+        newG.remove_node(node)
+    return newG
+
+
 if __name__ == '__main__':
     import kappathings as kt
     import kappaviz as viz
@@ -129,6 +150,6 @@ if __name__ == '__main__':
     print(basis)
     r = viz.Renderer(c)
     # r.html_render()
-    r.nx_render()
-    r.nx_color_edgelist(edge_list=basis[0])
+    r.render()
+    r.color_edgelists(edge_list=cycle)
     viz.show()

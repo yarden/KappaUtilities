@@ -1,8 +1,12 @@
+# Walter Fontana at 29.06.2020
+
 import networkx as nx
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
+import matplotlib.collections as artcoll
 import plotly.graph_objects as go
 import traceback
+import copy
 import kappagraph as kg
 
 
@@ -40,6 +44,22 @@ def show(filename=''):
         plt.show()
 
 
+def remove_all_graphical_edges():
+    for artist in plt.gca().get_children():
+        if isinstance(artist, artcoll.LineCollection):
+            artist.remove()
+
+
+def copy_renderer(renderer, new_nxG=None):
+    new_renderer = copy.copy(renderer)
+    new_renderer.name = f'copy of {renderer.name}'
+    new_renderer.nxG = new_nxG
+    new_renderer.fig = None
+    new_renderer.ax = None
+    new_renderer.layout()
+    return new_renderer
+
+
 class Renderer:
     def __init__(self, komplex, prog='neato', node_info=True, name=None):
         """
@@ -61,16 +81,6 @@ class Renderer:
         # create the networkx version of 'komplex'
         self.nxG = kg.make_nxgraph(komplex)
         self.composition = komplex.composition
-
-        # self.node_hover_text = []
-        # if node_info:
-        #     for node in self.nxG.nodes:
-        #         iface = komplex.agents[node]
-        #         iface = dict(sorted(iface.items()))
-        #         info = f"<b>{node}</b><br>"
-        #         for site in iface.keys():
-        #             info += f"{site:>10}  ->  state: {iface[site]['state']:<5} bond: {iface[site]['bond']}<br>"
-        #         self.node_hover_text += [info[:-4]]
 
         self.node_hover_text = {}
         if node_info:
@@ -98,6 +108,15 @@ class Renderer:
 
         self.fig = None
         self.ax = None
+
+        # assign colors to node types
+        self.type_color = {}
+        i = 0
+        # fill palette index in order of (descending) frequency
+        for typ in self.composition.keys():
+            self.type_color[typ] = i % len(self.nx_palette)
+            i += 1
+
         # compute layout
         # positions = nx.nx_pydot.graphviz_layout(self.nxG, prog=prog)
         self.positions = nx.nx_agraph.graphviz_layout(self.nxG, prog=prog)
@@ -107,13 +126,15 @@ class Renderer:
         plt.close(self.fig)
         print(f'{self.name} deleted')
 
-    def set_nx_palette(self, palette):
+    def layout(self): self.positions = nx.nx_agraph.graphviz_layout(self.nxG, prog='neato')
+
+    def set_palette(self, palette):
         self.nx_palette = palette
 
     def set_html_palette(self, palette):
         self.html_palette = palette
 
-    def nx_render(self, labels='short', node_size=400, font_size=11, line_width=1, edge_color='black'):
+    def render(self, labels='short', node_size=400, font_size=11, line_width=1, edge_color='black'):
         """
         Render a networkx graph with matplotlib.
 
@@ -137,16 +158,9 @@ class Renderer:
         else:
             self.nx_options['with_labels'] = False
 
-        # assign colors to nodes
-        clr = {}
-        i = 0
-        # fill palette index in order of (descending) frequency
-        for type in self.composition.keys():
-            clr[type] = i % len(self.nx_palette)
-            i += 1
         self.nx_options['node_color'] = []
         for node in self.nxG.nodes:
-            self.nx_options['node_color'] += [self.nx_palette[clr[self.nxG.nodes[node]['type']]]]
+            self.nx_options['node_color'] += [self.nx_palette[self.type_color[self.nxG.nodes[node]['type']]]]
         self.nx_options['edge_color'] = edge_color
         self.nx_options['width'] = line_width  # edge width
 
@@ -165,40 +179,66 @@ class Renderer:
         # nx.draw_networkx_edge_labels(self.nxG, self.positions, edge_labels=edge_labels, font_size=4)
 
         # the legend
-        colors = [f'{self.nx_palette[clr[n]]}' for n in clr.keys()]
-        items = [Line2D([0, 1], [0, 1],
-                        color='white',
-                        marker='o',
-                        markersize=7,
-                        markerfacecolor=clr,
-                        linewidth=0) for clr in colors]
-        labels = [f'{node}' for node in clr.keys()]
+        colors = [f'{self.nx_palette[self.type_color[n]]}' for n in self.type_color.keys()]
+        items = [Line2D([0, 1], [0, 1], color='white', marker='o', markersize=7, markerfacecolor=clr, linewidth=0)
+                 for clr in colors]
+        labels = [f'{node}' for node in self.type_color.keys()]
         self.ax.legend(items, labels)
 
-    def nx_color_edgelist(self, edge_list=[], line_width=1, edge_color='r'):
-        nx.draw_networkx_edges(self.nxG, self.positions, ax=self.ax, edgelist=edge_list, width=line_width,
-                               edge_color=edge_color)
+    def color_edgelists(self, edge_list=[], line_width=1, edge_color='r'):
+        # to unify handling, convert to a list of lists (such as coming from a cycle basis)
+        if not isinstance(edge_list[0], list):
+            edge_list = [edge_list]
+
+        self.delete_edgelists(edge_list=edge_list)
+        # draw requested edges in new style
+        for list_of_edges in edge_list:
+            nx.draw_networkx_edges(self.nxG, self.positions, ax=self.ax, edgelist=list_of_edges, width=line_width,
+                                   edge_color=edge_color)
 
         # edge_labels = nx.get_edge_attributes(self.nxG, 'sites')
         # nx.draw_networkx_edge_labels(self.nxG, self.positions, edge_labels=edge_labels, font_size=4)
 
-    def nx_color_nodelist(self, node_list=[], color='b', line_width=2):
-        clr = {}
-        i = 0
-        # fill palette index in order of (descending) frequency
-        for type in self.composition.keys():
-            clr[type] = i % len(self.nx_palette)
-            i += 1
+    def color_nodelist(self, node_list=[], color='b', line_width=2):
         node_color = []
         for node in node_list:
-            node_color += [self.nx_palette[clr[self.nxG.nodes[node]['type']]]]
-        nx.draw_networkx_nodes(self.nxG, nodelist=node_list, pos=self.positions,
-                               ax=self.ax,
-                               node_size=self.nx_options['node_size'],
-                               node_color=node_color,
-                               linewidths=line_width,
-                               edgecolors=color
-                               )
+            node_color += [self.nx_palette[self.type_color[self.nxG.nodes[node]['type']]]]
+        nx.draw_networkx_nodes(self.nxG, nodelist=node_list, pos=self.positions, ax=self.ax,
+                               node_size=self.nx_options['node_size'], node_color=node_color,
+                               linewidths=line_width, edgecolors=color)
+
+    def delete_edgelists(self, edge_list=[]):
+        # to unify handling, convert to a list of lists (such as coming from a cycle basis)
+        if not isinstance(edge_list[0], list):
+            edge_list = [edge_list]
+
+        untouched_edges = set([frozenset(e) for e in self.nxG.edges()])
+        for list_of_edges in edge_list:
+            untouched_edges = untouched_edges - set([frozenset(e) for e in list_of_edges])
+        remaining_edges = [tuple(x) for x in untouched_edges]
+
+        remove_all_graphical_edges()
+        # redraw what is left in old style
+        nx.draw_networkx_edges(self.nxG, self.positions, ax=self.ax, edgelist=remaining_edges, **self.nx_options)
+
+    def delete_nodelist(self, node_list=[]):
+        untouched_nodes = set(n for n in self.nxG.nodes()) - set(n for n in node_list)
+        remaining_nodes = [x for x in untouched_nodes]
+
+        self.ax.cla()  # clear the whole figure
+        node_color = []
+        for node in remaining_nodes:
+            node_color += [self.nx_palette[self.type_color[self.nxG.nodes[node]['type']]]]
+        nx.draw_networkx_nodes(self.nxG, nodelist=remaining_nodes, pos=self.positions,
+                               ax=self.ax, node_size=self.nx_options['node_size'], node_color=node_color)
+
+        # remove the edges incident on the removed nodes
+        e_to_delete = []
+        for node in node_list:
+            e_to_delete += list(self.nxG.edges(node))
+        edges = set([frozenset(e) for e in self.nxG.edges()]) - set([frozenset(e) for e in e_to_delete])
+        remaining_edges = [tuple(x) for x in edges]
+        nx.draw_networkx_edges(self.nxG, self.positions, ax=self.ax, edgelist=remaining_edges, **self.nx_options)
 
     def html_render(self, filename='', node_size=15, line_width=1, cycle=[]):
         """
@@ -356,7 +396,7 @@ def show_ranked_complexes(snapshot, sort='size', cutoff=3, cols=3, rows=1, prog=
         plt.subplot(rows, cols, i)
         plt.title(sort + ' ' + str(c.size))
         r = Renderer(c, prog=prog)
-        r.nx_render()
+        r.render()
         i += 1
     plt.show()
 
@@ -377,7 +417,7 @@ if __name__ == '__main__':
     print(f'is multi-graph: {c1.is_multigraph()}')
     # write_dot(c1, 'complex.dot')
     r = Renderer(c1)
-    r.nx_render(node_size=10, labels='none')
+    r.render(node_size=10, labels='none')
     show()
     r.html_render()
     # r.html_render(filename='complex.html')

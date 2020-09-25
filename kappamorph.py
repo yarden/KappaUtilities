@@ -1,3 +1,5 @@
+# Walter Fontana at 29.06.2020
+
 """
 The first approach is an adaptation of the undirected graph isomorphism code (VF2 algorithm) from networkx
 (https://github.com/networkx/networkx/tree/master/networkx/algorithms/isomorphism)

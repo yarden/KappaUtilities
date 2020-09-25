@@ -1,3 +1,5 @@
+# Walter Fontana at 29.06.2020
+
 import re
 import copy
 import json
@@ -269,6 +271,37 @@ class KappaComplex:
 
             self.info[name]['degree'] = degree
 
+    def kappa_expression(self):
+        """
+        convert internal rep into a kappa string
+        """
+        # If we are dealing with an object that contains a bond pattern, the degree of a node has no meaning.
+        # The degree is used only for VF2 isomorphism checking, but not for pattern embeddings.
+
+        i = 1
+        num = {}
+        for (p, q) in self.bonds:
+            num[p] = i
+            num[q] = i
+            i += 1
+
+        s = ''
+        for name in self.agents:
+            s += f'{self.info[name]["type"]}('
+            for site in self.agents[name]:
+                s += f'{site}'
+                state = self.agents[name][site]['state']
+                if state != '#':
+                    s += '{' + f'{state}' + '}'
+                link = self.agents[name][site]['bond']
+                if link == '.':
+                    s += '[.] '
+                else:
+                    ag, ste = link.split(self.bondsep)
+                    s += f'[{num[(ag, ste)]}] '
+            s = s[:-1] + '), '
+        return s[:-2]
+
     def parse_agent(self, agent_expression):
         match = self.agent_re.match(agent_expression)
         if not match:
@@ -522,22 +555,25 @@ class KappaComplex:
         info += self.sum_formula + '\n'
         return info
 
-    def show(self):
+    def show(self, internal=False):
         """
-        print Kappa string from representation
+        print representation
+        if internal=False, print standard kappa expression
         """
-        info = ''
-        for i in range(0, self.size):
-            name = self.name_list[i]
-            interface = ''
-            iface = self.agents[name]
-            for s in iface:
-                interface += s + '{' + iface[s]['state'] + '}' + '[' + iface[s]['bond'] + '] '
-            info += name + '(' + interface[:-1] + '), '
-        print(info[:-2])  # remove last comma+blank
+        if internal:
+            info = ''
+            for i in range(0, self.size):
+                name = self.name_list[i]
+                interface = ''
+                iface = self.agents[name]
+                for s in iface:
+                    interface += s + '{' + iface[s]['state'] + '}' + '[' + iface[s]['bond'] + '] '
+                info += name + '(' + interface[:-1] + '), '
+            print(info[:-2])  # remove last comma+blank
+        else:
+            print(self.kappa_expression())
 
-    def __iter__(self):
-        return iter(self.name_list)
+    def __iter__(self): return iter(self.name_list)
 
     # Implementing __next__ as below does not work... The reason is that breaking out of a loop does not
     # reset self.next! Use Python's iter() function as above.
