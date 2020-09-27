@@ -5,59 +5,8 @@ import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 import matplotlib.collections as artcoll
 import plotly.graph_objects as go
-import traceback
-import copy
 import kappagraph as kg
-
-
-def write_dot(komplex, filename='complex.dot',
-              palette=('blue', 'green', 'red', 'cyan', 'magenta', 'yellow', 'khaki', 'silver'),
-              shapalette=('circle', 'triangle', 'polygon', 'oval', 'diamond', 'house', 'hexagon',
-                          'parallelogram', 'pentagon', 'rectangle'),
-              uniform=True, shape='oval'):
-    nxG = kg.make_nxgraph(komplex)
-
-    # assign colors to nodes
-    color = {}
-    shapes = {}
-    i = 0
-    # fill palette index in order of (descending) frequency
-    for type in komplex.composition.keys():
-        color[type] = i % len(palette)
-        shapes[type] = i % len(shapalette)
-        i += 1
-    for node in nxG.nodes():
-        nxG.nodes[node]['style'] = 'filled'
-        nxG.nodes[node]['fillcolor'] = palette[color[nxG.nodes[node]['type']]]
-        if not uniform:
-            nxG.nodes[node]['shape'] = shapalette[shapes[nxG.nodes[node]['type']]]
-        else:
-            nxG.nodes[node]['shape'] = shape
-
-    nx.nx_agraph.write_dot(nxG, filename)
-
-
-def show(filename=''):
-    if filename:
-        plt.savefig(filename)
-    else:
-        plt.show()
-
-
-def remove_all_graphical_edges():
-    for artist in plt.gca().get_children():
-        if isinstance(artist, artcoll.LineCollection):
-            artist.remove()
-
-
-def copy_renderer(renderer, new_nxG=None):
-    new_renderer = copy.copy(renderer)
-    new_renderer.name = f'copy of {renderer.name}'
-    new_renderer.nxG = new_nxG
-    new_renderer.fig = None
-    new_renderer.ax = None
-    new_renderer.layout()
-    return new_renderer
+import traceback
 
 
 class Renderer:
@@ -67,34 +16,32 @@ class Renderer:
         Subsequently, various display methods can be invoked.
 
         :param komplex:
+        :param komplex:
         :param prog: any of neato, dot, twopi, circo, fdp, nop, wc, acyclic, gvpr, gvcolor, ccomps,
                             sccmap, tred, sfdp, unflatten
         :param node_info:
         """
-        # (komplex is never assigned, so it should be effectively 'pass by reference')
-
         if name is None:
             (filename, line_number, function_name, text) = traceback.extract_stack()[-2]
             name = text[:text.find('=')].strip()
         self.name = name
 
-        # create the networkx version of 'komplex'
-        self.nxG = kg.make_nxgraph(komplex)
-        self.composition = komplex.composition
+        self.Graph = kg.KappaGraph(komplex)
+        self.nxGraph = self.Graph.nxGraph
 
         self.node_hover_text = {}
         if node_info:
-            for type in self.composition.keys():
+            for type in komplex.composition.keys():
                 self.node_hover_text[type] = []
-            for node in self.nxG.nodes:
+            for node in self.nxGraph.nodes:
                 iface = komplex.agents[node]
                 iface = dict(sorted(iface.items()))
                 info = f"<b>{node}</b><br>"
                 for site in iface.keys():
                     info += f"{site:>10}  ->  state: {iface[site]['state']:<5} bond: {iface[site]['bond']}<br>"
-                self.node_hover_text[self.nxG.nodes[node]['type']] += [info[:-4]]
+                self.node_hover_text[self.nxGraph.nodes[node]['type']] += [info[:-4]]
 
-        self.nx_palette = ('b', 'g', 'r', 'c', 'm', 'y', 'k', 'w')
+        self.nx_palette = ('c', 'r', 'b', 'g', 'm', 'y', 'k', 'w')
         self.html_palette = ('blue', 'green', 'red', 'cyan', 'magenta', 'yellow', 'khaki', 'silver')
 
         self.nx_options = {'font_size': 11,
@@ -105,7 +52,6 @@ class Renderer:
                            'edge_color': 'black',
                            'width': 1
                            }
-
         self.fig = None
         self.ax = None
 
@@ -113,20 +59,27 @@ class Renderer:
         self.type_color = {}
         i = 0
         # fill palette index in order of (descending) frequency
-        for typ in self.composition.keys():
+        for typ in komplex.composition.keys():
             self.type_color[typ] = i % len(self.nx_palette)
             i += 1
 
-        # compute layout
-        # positions = nx.nx_pydot.graphviz_layout(self.nxG, prog=prog)
-        self.positions = nx.nx_agraph.graphviz_layout(self.nxG, prog=prog)
+        self.nx_options['node_color'] = []
+        for node in self.nxGraph.nodes:
+            self.nx_options['node_color'] += [self.nx_palette[self.type_color[self.nxGraph.nodes[node]['type']]]]
+
+        # layout
+        self.positions = nx.nx_agraph.graphviz_layout(self.nxGraph, prog=prog)
 
     def __del__(self):
         self.fig.clf()
         plt.close(self.fig)
         print(f'{self.name} deleted')
 
-    def layout(self): self.positions = nx.nx_agraph.graphviz_layout(self.nxG, prog='neato')
+    def layout(self):
+        self.positions = nx.nx_agraph.graphviz_layout(self.nxGraph, prog='neato')
+        self.nx_options['node_color'] = []
+        for node in self.nxGraph.nodes:
+            self.nx_options['node_color'] += [self.nx_palette[self.type_color[self.nxGraph.nodes[node]['type']]]]
 
     def set_palette(self, palette):
         self.nx_palette = palette
@@ -134,7 +87,7 @@ class Renderer:
     def set_html_palette(self, palette):
         self.html_palette = palette
 
-    def render(self, labels='short', node_size=400, font_size=11, line_width=1, edge_color='black'):
+    def render(self, labels='short', node_size=400, font_size=9, line_width=1, edge_color='gray'):
         """
         Render a networkx graph with matplotlib.
 
@@ -149,18 +102,15 @@ class Renderer:
         self.nx_options['node_size'] = node_size
         # set labels
         if labels == 'type':
-            self.nx_options['labels'] = {node: self.nxG.nodes[node]['type'] for node in self.nxG.nodes}
+            self.nx_options['labels'] = {node: self.nxGraph.nodes[node]['type'] for node in self.nxGraph.nodes}
         elif labels == 'short':
-            self.nx_options['labels'] = {node: self.nxG.nodes[node]['id'] for node in self.nxG.nodes}
+            self.nx_options['labels'] = {node: self.nxGraph.nodes[node]['id'] for node in self.nxGraph.nodes}
         elif labels == 'full':
-            self.nx_options['labels'] = {node: self.nxG.nodes[node]['type'] + self.nxG.nodes[node]['id']
-                                         for node in self.nxG.nodes}
+            self.nx_options['labels'] = {node: self.nxGraph.nodes[node]['type'] + self.nxGraph.nodes[node]['id']
+                                         for node in self.nxGraph.nodes}
         else:
             self.nx_options['with_labels'] = False
 
-        self.nx_options['node_color'] = []
-        for node in self.nxG.nodes:
-            self.nx_options['node_color'] += [self.nx_palette[self.type_color[self.nxG.nodes[node]['type']]]]
         self.nx_options['edge_color'] = edge_color
         self.nx_options['width'] = line_width  # edge width
 
@@ -169,14 +119,8 @@ class Renderer:
             self.ax.cla()
         else:
             self.fig, self.ax = plt.subplots()
-        # nx.draw_networkx_edges(self.nxG, self.positions, ax=self.ax, width=line_width,
-        #                        edge_color=self.nx_options['edge_color'])
-        # nx.draw_networkx_nodes(self.nxG, pos=self.positions, ax=self.ax, **self.nx_options)
-        # nx.draw_networkx_nodes(self.nxG, pos=self.positions, ax=self.ax, **self.nx_options)
 
-        nx.draw_networkx(self.nxG, pos=self.positions, ax=self.ax, **self.nx_options)
-        # edge_labels = nx.get_edge_attributes(self.nxG, 'sites')
-        # nx.draw_networkx_edge_labels(self.nxG, self.positions, edge_labels=edge_labels, font_size=4)
+        nx.draw_networkx(self.nxGraph, pos=self.positions, ax=self.ax, **self.nx_options)
 
         # the legend
         colors = [f'{self.nx_palette[self.type_color[n]]}' for n in self.type_color.keys()]
@@ -193,17 +137,14 @@ class Renderer:
         self.delete_edgelists(edge_list=edge_list)
         # draw requested edges in new style
         for list_of_edges in edge_list:
-            nx.draw_networkx_edges(self.nxG, self.positions, ax=self.ax, edgelist=list_of_edges, width=line_width,
+            nx.draw_networkx_edges(self.nxGraph, self.positions, ax=self.ax, edgelist=list_of_edges, width=line_width,
                                    edge_color=edge_color)
-
-        # edge_labels = nx.get_edge_attributes(self.nxG, 'sites')
-        # nx.draw_networkx_edge_labels(self.nxG, self.positions, edge_labels=edge_labels, font_size=4)
 
     def color_nodelist(self, node_list=[], color='b', line_width=2):
         node_color = []
         for node in node_list:
-            node_color += [self.nx_palette[self.type_color[self.nxG.nodes[node]['type']]]]
-        nx.draw_networkx_nodes(self.nxG, nodelist=node_list, pos=self.positions, ax=self.ax,
+            node_color += [self.nx_palette[self.type_color[self.nxGraph.nodes[node]['type']]]]
+        nx.draw_networkx_nodes(self.nxGraph, nodelist=node_list, pos=self.positions, ax=self.ax,
                                node_size=self.nx_options['node_size'], node_color=node_color,
                                linewidths=line_width, edgecolors=color)
 
@@ -212,33 +153,44 @@ class Renderer:
         if not isinstance(edge_list[0], list):
             edge_list = [edge_list]
 
-        untouched_edges = set([frozenset(e) for e in self.nxG.edges()])
+        untouched_edges = set([frozenset(e) for e in self.nxGraph.edges()])
         for list_of_edges in edge_list:
             untouched_edges = untouched_edges - set([frozenset(e) for e in list_of_edges])
         remaining_edges = [tuple(x) for x in untouched_edges]
 
-        remove_all_graphical_edges()
+        self.remove_all_edges()
         # redraw what is left in old style
-        nx.draw_networkx_edges(self.nxG, self.positions, ax=self.ax, edgelist=remaining_edges, **self.nx_options)
+        nx.draw_networkx_edges(self.nxGraph, self.positions, ax=self.ax, edgelist=remaining_edges, **self.nx_options)
 
     def delete_nodelist(self, node_list=[]):
-        untouched_nodes = set(n for n in self.nxG.nodes()) - set(n for n in node_list)
+        untouched_nodes = set(n for n in self.nxGraph.nodes()) - set(n for n in node_list)
         remaining_nodes = [x for x in untouched_nodes]
 
         self.ax.cla()  # clear the whole figure
         node_color = []
         for node in remaining_nodes:
-            node_color += [self.nx_palette[self.type_color[self.nxG.nodes[node]['type']]]]
-        nx.draw_networkx_nodes(self.nxG, nodelist=remaining_nodes, pos=self.positions,
+            node_color += [self.nx_palette[self.type_color[self.nxGraph.nodes[node]['type']]]]
+        nx.draw_networkx_nodes(self.nxGraph, nodelist=remaining_nodes, pos=self.positions,
                                ax=self.ax, node_size=self.nx_options['node_size'], node_color=node_color)
 
         # remove the edges incident on the removed nodes
         e_to_delete = []
         for node in node_list:
-            e_to_delete += list(self.nxG.edges(node))
-        edges = set([frozenset(e) for e in self.nxG.edges()]) - set([frozenset(e) for e in e_to_delete])
+            e_to_delete += list(self.nxGraph.edges(node))
+        edges = set([frozenset(e) for e in self.nxGraph.edges()]) - set([frozenset(e) for e in e_to_delete])
         remaining_edges = [tuple(x) for x in edges]
-        nx.draw_networkx_edges(self.nxG, self.positions, ax=self.ax, edgelist=remaining_edges, **self.nx_options)
+        nx.draw_networkx_edges(self.nxGraph, self.positions, ax=self.ax, edgelist=remaining_edges, **self.nx_options)
+
+    def show(self, filename=''):
+        if filename:
+            self.fig.savefig(filename)
+        else:
+            plt.show(block=False)
+
+    def remove_all_edges(self):
+        for artist in self.ax.get_children():
+            if isinstance(artist, artcoll.LineCollection):
+                artist.remove()
 
     def html_render(self, filename='', node_size=15, line_width=1, cycle=[]):
         """
@@ -253,7 +205,7 @@ class Renderer:
         """
         edge_x = []
         edge_y = []
-        for edge in self.nxG.edges():
+        for edge in self.nxGraph.edges():
             x0, y0 = self.positions[edge[0]]
             x1, y1 = self.positions[edge[1]]
             edge_x.append(x0)
@@ -305,10 +257,10 @@ class Renderer:
             clr[type] = i % len(self.html_palette)
             i += 1
 
-        for node in self.nxG.nodes():
+        for node in self.nxGraph.nodes():
             x, y = self.positions[node]
-            node_x[self.nxG.nodes[node]['type']].append(x)
-            node_y[self.nxG.nodes[node]['type']].append(y)
+            node_x[self.nxGraph.nodes[node]['type']].append(x)
+            node_y[self.nxGraph.nodes[node]['type']].append(y)
 
         # nodes as a scatter traces
         node_trace = {}
@@ -418,7 +370,7 @@ if __name__ == '__main__':
     # write_dot(c1, 'complex.dot')
     r = Renderer(c1)
     r.render(node_size=10, labels='none')
-    show()
+    r.show()
     r.html_render()
     # r.html_render(filename='complex.html')
     # r.nx_render(c1, prog='sfdp', node_size=80, font_size=4)

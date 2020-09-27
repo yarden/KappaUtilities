@@ -9,7 +9,7 @@ def show(pdf=''):
     :param pdf: if not '', write to pdf file
     """
     if pdf == '':
-        plt.show()
+        plt.show(block=False)
     else:
         plt.savefig(pdf)
 
