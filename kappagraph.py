@@ -55,9 +55,10 @@ class KappaGraph:
         except nx.NetworkXNoCycle:
             return []
 
-    def get_minimum_cycle_basis(self):
+    def get_cycle_basis(self, minimum=True):
         """
         A wrapper for networkx cycle basis finder
+        :param minimum: True (default), if minimum cycle basis is sought
         :param nxG: networkX graph
         :return: list of edge lists, such as [[(0, 1), (1, 2), (2, 3)]...]
                  or []
@@ -70,7 +71,10 @@ class KappaGraph:
             N = 0
         # A list of cycle lists. Each cycle list is a list of nodes which forms a cycle (loop) in G.
         # The nodes are not necessarily returned in a order by which they appear in the cycle...
-        basis = nx.minimum_cycle_basis(G)
+        if minimum:
+            basis = nx.minimum_cycle_basis(G)
+        else:
+            basis = nx.cycle_basis(G)
 
         # convert into edge lists...
         edge_lists = []
@@ -153,7 +157,7 @@ if __name__ == '__main__':
     c.show()
     g = KappaGraph(c)
     cycle = g.get_cycle()
-    basis, n = g.get_minimum_cycle_basis()
+    basis, n = g.get_cycle_basis()
     print(cycle)
     print(basis)
     r = viz.Renderer(c)

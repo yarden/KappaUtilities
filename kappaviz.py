@@ -66,12 +66,12 @@ class Renderer:
         self.nx_options['node_color'] = []
         for node in self.nxGraph.nodes:
             self.nx_options['node_color'] += [self.nx_palette[self.type_color[self.nxGraph.nodes[node]['type']]]]
+        self.legend_colors = [f'{self.nx_palette[self.type_color[n]]}' for n in self.type_color.keys()]
 
         # layout
         self.positions = nx.nx_agraph.graphviz_layout(self.nxGraph, prog=prog)
 
     def __del__(self):
-        self.fig.clf()
         plt.close(self.fig)
         print(f'{self.name} deleted')
 
@@ -80,6 +80,7 @@ class Renderer:
         self.nx_options['node_color'] = []
         for node in self.nxGraph.nodes:
             self.nx_options['node_color'] += [self.nx_palette[self.type_color[self.nxGraph.nodes[node]['type']]]]
+        self.legend_colors = [f'{self.nx_palette[self.type_color[n]]}' for n in self.type_color.keys()]
 
     def set_palette(self, palette):
         self.nx_palette = palette
@@ -123,16 +124,16 @@ class Renderer:
         nx.draw_networkx(self.nxGraph, pos=self.positions, ax=self.ax, **self.nx_options)
 
         # the legend
-        colors = [f'{self.nx_palette[self.type_color[n]]}' for n in self.type_color.keys()]
         items = [Line2D([0, 1], [0, 1], color='white', marker='o', markersize=7, markerfacecolor=clr, linewidth=0)
-                 for clr in colors]
+                 for clr in self.legend_colors]
         labels = [f'{node}' for node in self.type_color.keys()]
         self.ax.legend(items, labels)
 
     def color_edgelists(self, edge_list=[], line_width=1, edge_color='r'):
         # to unify handling, convert to a list of lists (such as coming from a cycle basis)
-        if not isinstance(edge_list[0], list):
-            edge_list = [edge_list]
+        if edge_list:
+            if not isinstance(edge_list[0], list):
+                edge_list = [edge_list]
 
         self.delete_edgelists(edge_list=edge_list)
         # draw requested edges in new style
@@ -150,8 +151,9 @@ class Renderer:
 
     def delete_edgelists(self, edge_list=[]):
         # to unify handling, convert to a list of lists (such as coming from a cycle basis)
-        if not isinstance(edge_list[0], list):
-            edge_list = [edge_list]
+        if edge_list:
+            if not isinstance(edge_list[0], list):
+                edge_list = [edge_list]
 
         untouched_edges = set([frozenset(e) for e in self.nxGraph.edges()])
         for list_of_edges in edge_list:

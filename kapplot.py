@@ -31,7 +31,8 @@ class XY_plot:
         self.parameters = {'linestyle': '',
                            'linewidth': 0.5,
                            'marker': 'o',
-                           'label': ''
+                           'label': '',
+                           'markersize': 0
                            }
 
         self.fig, self.ax = plt.subplots()

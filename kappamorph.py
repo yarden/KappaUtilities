@@ -567,7 +567,10 @@ class SiteGraphMatcher:
         return self.morphism(host, pattern)
 
     def isomorphic_unsafe(self, host, pattern, h_start, p_start):
-        # Check size
+        # Here we supply specific anchors for the match, rather than checking all possible
+        # anchors as in (safe) isomorphic().
+
+        # Obviously, check size first
         if host.size != pattern.size:
             return False
         # Check composition
@@ -602,13 +605,13 @@ class SiteGraphMatcher:
     def all_embeddings(self, host, pattern):
         # Check size
         if host.size < pattern.size:
-            return False
+            return []
         # Check composition
         for node_type in pattern.composition:
             if node_type not in host.composition.keys():
-                return False
+                return []
             if host.composition[node_type] < pattern.composition[node_type]:
-                return False
+                return []
 
         start, stop = host.type_slice[pattern.rarest_type]
         mappings = []
