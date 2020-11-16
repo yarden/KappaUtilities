@@ -1,4 +1,4 @@
-# Walter Fontana at 29.06.2020
+# Walter Fontana, 2020
 
 """
 The first approach is an adaptation of the undirected graph isomorphism code (VF2 algorithm) from networkx
@@ -53,6 +53,7 @@ class GraphMatcher:
         self.inout_2 = {}
         self.state = None
         self.mapping = {}
+        self.semantic_feasibility = self.site_graph_semantic_feasibility
 
     def initialize(self):
         """Reinitializes the state of the algorithm.
@@ -83,7 +84,12 @@ class GraphMatcher:
         # Provide a convenient way to access the isomorphism mapping.
         self.mapping = self.core_1.copy()
 
-    def isomorphic_vf2(self, G1, G2):
+    def isomorphic_vf2(self, G1, G2, kappa=True):
+        if not kappa:
+            self.semantic_feasibility = self.simple_semantic_feasibility
+        else:
+            self.semantic_feasibility = self.site_graph_semantic_feasibility
+
         # get the number of bonds between any two agents;
         if not G1.nbonds:
             G1.get_bond_numbers()
@@ -91,7 +97,12 @@ class GraphMatcher:
             G2.get_bond_numbers()
         return self.embed_vf2(G1, G2, test='iso')
 
-    def all_embeddings_vf2(self, host, pattern):
+    def all_embeddings_vf2(self, host, pattern, kappa=True):
+        if not kappa:
+            self.semantic_feasibility = self.simple_semantic_feasibility
+        else:
+            self.semantic_feasibility = self.site_graph_semantic_feasibility
+
         if pattern.rarest_type not in host.composition.keys():
             return []
         else:
@@ -351,7 +362,7 @@ class GraphMatcher:
         # Otherwise, this node pair is syntactically feasible!
         return True
 
-    def semantic_feasibility(self, G1_node, G2_node):
+    def site_graph_semantic_feasibility(self, G1_node, G2_node):
         """Returns True if adding (G1_node, G2_node) is semantically feasible.
         The semantic feasibility function should return True if it is
         acceptable to add the candidate pair (G1_node, G2_node) to the current
@@ -441,6 +452,18 @@ class GraphMatcher:
                         if bond2 != bond1:
                             return False
         return True
+
+    def simple_semantic_feasibility(self, G1_node, G2_node):
+        """
+        This is for the case in which we consider a Kappa object as if it were a simple (typed) graph.
+        That is, we abstract from sites and only consider connectivity.
+        """
+
+        # type match
+        if self.G1.info[G1_node]['type'] != self.G2.info[G2_node]['type']:
+            return False
+        else:
+            return True
 
 
 # ----------------------------------------------------------------------------------------
@@ -534,6 +557,7 @@ class GMState:
 class Fail(Exception):
     pass
 
+
 # In the following implementation, speed-ups were achieved by
 # * avoiding assignment of host and pattern graphs (not sure why that has an effect)
 # * turning off degree checking as preflight
@@ -565,6 +589,18 @@ class SiteGraphMatcher:
         # if d1 != d2:
         #     return False
         return self.morphism(host, pattern)
+
+    def automorphisms(self, pattern):
+        # wrapper for special case of all_embeddings()
+        start, stop = pattern.type_slice[pattern.rarest_type]
+        mappings = []
+        for node in pattern.name_list[start:stop]:
+            if self._embed(pattern, pattern, h_start=node):
+                # sort sensibly for readability
+                self.mapping = {k: v for k, v in sorted(self.mapping.items(), key=lambda x: x[0])}
+                # the rigidity approach never produces identical embeddings
+                mappings += [self.mapping]
+        return mappings
 
     def isomorphic_unsafe(self, host, pattern, h_start, p_start):
         # Here we supply specific anchors for the match, rather than checking all possible
@@ -690,7 +726,8 @@ class SiteGraphMatcher:
     #         self.stack.pop()
 
     def node_match(self, host, pattern, h_node, p_node):
-        # type match
+        # here, the prefix 'h' stands for 'host' and 'p' for 'pattern'
+        # start with type match
         h_node_type = host.info[h_node]['type']
         p_node_type = pattern.info[p_node]['type']
         if h_node_type != p_node_type:
@@ -750,6 +787,21 @@ if __name__ == '__main__':
     import kappasnap as ks
     import time
     import re
+
+    G1 = kt.KappaComplex('A(r[5] p[.]), A(l[1] p[2]), A(r[1] p[3] l[5]), P(a3[2] d[4]), P(a1[3] d[4])')
+    G2a = kt.KappaComplex('A(l[1] p[2]), A(r[1] p[3]), P(a3[2] d[4]), P(a1[3] d[4])')
+    G2c = kt.KappaComplex('A(l[1] p[2]), A(r[1] p[3]), P(a1[2] d[4]), P(a1[3] d[4])')
+    G2b = kt.KappaComplex('A(l[1] p[2]), A(r[1] p[3]), P(a2[2] d[4]), P(a3[3] d[4])')
+    GM = GraphMatcher()
+    maps = GM.all_embeddings_vf2(G1, G2a, kappa=True)
+    print(f'VF2: number of embeddings of G2a into G1: {len(maps)} ')
+    print_map(maps)
+    maps = GM.all_embeddings_vf2(G1, G2c, kappa=False)
+    print(f'VF2: number of embeddings of G2c into G1: {len(maps)} ')
+    print_map(maps)
+    maps = GM.all_embeddings_vf2(G1, G2b, kappa=False)
+    print(f'VF2: number of embeddings of G2b into G1: {len(maps)} ')
+    print_map(maps)
 
     G1 = kt.KappaComplex('A(b[1] a[2]), A(b[3] a[2]), B(a[1] x{p}), B(a[3] x{u})', normalize=False)
     print(G1.name_list)
@@ -864,6 +916,8 @@ if __name__ == '__main__':
     maps = SGM.all_embeddings(G1, G2)
     print(f'rigid: number of embeddings of G2 into G1: {len(maps)}')
     print_map(maps)
+
+    # --------------------------------------------------------------------------------
 
     # print("big stuff:")
     # line = open('TestData/monster.ka', 'r').read()

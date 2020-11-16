@@ -1,4 +1,4 @@
-# Walter Fontana at 15.09.2020
+# Walter Fontana, 2020
 
 import networkx as nx
 

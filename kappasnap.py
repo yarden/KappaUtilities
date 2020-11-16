@@ -1,7 +1,7 @@
-# Walter Fontana at 29.06.2020
+# Walter Fontana, 2020
 
 import kappathings as kt
-import kappy
+# import kappy
 import re
 import gzip
 import json
@@ -55,9 +55,9 @@ class SnapShot:
                 length[c.size] = c.count
 
         if dictionary:
-            d = {'length': [], 'count': []}
+            d = {'size': [], 'count': []}
             for l, c in sorted(length.items(), key=lambda i: i[0], reverse=False):
-                d['length'].append(l)
+                d['size'].append(l)
                 d['count'].append(c)
             return d
         else:

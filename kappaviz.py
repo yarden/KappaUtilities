@@ -1,4 +1,4 @@
-# Walter Fontana at 29.06.2020
+# Walter Fontana, 2020
 
 import networkx as nx
 import matplotlib.pyplot as plt
@@ -73,7 +73,7 @@ class Renderer:
 
     def __del__(self):
         plt.close(self.fig)
-        print(f'{self.name} deleted')
+        # print(f'{self.name} deleted')
 
     def layout(self):
         self.positions = nx.nx_agraph.graphviz_layout(self.nxGraph, prog='neato')
@@ -102,6 +102,7 @@ class Renderer:
         self.nx_options['font_size'] = font_size
         self.nx_options['node_size'] = node_size
         # set labels
+        self.nx_options['with_labels'] = True
         if labels == 'type':
             self.nx_options['labels'] = {node: self.nxGraph.nodes[node]['type'] for node in self.nxGraph.nodes}
         elif labels == 'short':
@@ -117,7 +118,8 @@ class Renderer:
 
         # we clear the whole figure since we are drawing the whole network
         if self.ax:
-            self.ax.cla()
+            plt.close(self.fig)
+            self.fig, self.ax = plt.subplots()
         else:
             self.fig, self.ax = plt.subplots()
 

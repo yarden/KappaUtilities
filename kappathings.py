@@ -1,4 +1,4 @@
-# Walter Fontana at 29.06.2020
+# Walter Fontana, 2020
 
 import re
 import copy
@@ -296,9 +296,14 @@ class KappaComplex:
                 link = self.agents[name][site]['bond']
                 if link == '.':
                     s += '[.] '
-                else:
+                elif link == '#':
+                    # s += '[#] '
+                    s += ''
+                elif self.bondsep in link:
                     ag, ste = link.split(self.bondsep)
                     s += f'[{num[(ag, ste)]}] '
+                else:
+                    s += f'[{link}] '
             s = s[:-1] + '), '
         return s[:-2]
 
@@ -377,13 +382,13 @@ class KappaComplex:
                 self.nbonds[(a1, a2)] = 1
 
     def extract_identifier(self, name):
-        agent_name, identifier = name.split(self.idsep[0])[:2]
+        agent_type, identifier = name.split(self.idsep[0])[:2]
         if self.idsep[1] and self.idsep[0] != self.idsep[1]:
             identifier = identifier[:-1]
-        return agent_name, identifier
+        return agent_type, identifier
 
-    def attach_identifier(self, name, id):
-        return name + self.idsep[0] + id + self.idsep[1]
+    def attach_identifier(self, agent_type, id):
+        return agent_type + self.idsep[0] + id + self.idsep[1]
 
     def make_navigation_list(self):
         # self.navigation[a1][a2] contains a site of a1 that anchors a bond to a2

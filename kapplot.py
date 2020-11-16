@@ -1,4 +1,4 @@
-# Walter Fontana at 20.09.2020
+# Walter Fontana, 2020
 
 import plotly.graph_objects as go
 import matplotlib.pyplot as plt
@@ -15,7 +15,7 @@ def show(pdf=''):
 
 
 class XY_plot:
-    def __init__(self, df, x='', y='', title='', xmajor=0, ymajor=0, params={}):
+    def __init__(self, params={}):
         """
         :param ymajor: multiple for major y-tick marks (0 for auto)
         :param xmajor: multiple for major x-tick marks (0 for auto)
@@ -27,6 +27,7 @@ class XY_plot:
         """
         self.default_x = 0
         self.default_y = 1
+        self.x_axis = None
         self.title = ''
         self.parameters = {'linestyle': '',
                            'linewidth': 0.5,
@@ -34,9 +35,14 @@ class XY_plot:
                            'label': '',
                            'markersize': 0
                            }
+        self.parameters = {**self.parameters, **params}
+        self.parameters_save = self.parameters
+        self.artists = {}
+        self.ncurve = 0
+        self.legend = None
 
         self.fig, self.ax = plt.subplots()
-        self.add(df, x=x, y=y, title=title, xmajor=xmajor, ymajor=ymajor, params=params)
+        self.overlay_axis = None
 
     def add(self, df, x='', y='', title='', xmajor=0, ymajor=0, params={}):
         """
@@ -49,12 +55,15 @@ class XY_plot:
         :param x: name of y column
         """
         self.parameters = {**self.parameters, **params}
-
+        self.ncurve += 1
+        self.parameters['label'] = self.parameters['label'] + f' [{self.ncurve}]'
         if x == '':
             for idx, c in enumerate(df.columns):
                 if idx == self.default_x:
                     x = c
                     break
+        self.x_axis = x
+
         if y == '':
             for idx, c in enumerate(df.columns):
                 if idx == self.default_y:
@@ -65,17 +74,65 @@ class XY_plot:
         else:
             self.title = title
 
-        self.ax.plot(df[x], df[y], 'o-', **self.parameters)
+        arts, = self.ax.plot(df[x], df[y], 'o-', **self.parameters)
+        self.artists[self.ncurve] = arts
+
         if xmajor != 0:
             self.ax.xaxis.set_major_locator(plt.MultipleLocator(xmajor))
         if ymajor != 0:
             self.ax.yaxis.set_major_locator(plt.MultipleLocator(ymajor))
         plt.grid(color='lightgrey')
-        # plt.vlines(df[x], 0., df[y], color='b', linestyles='solid', label='')
-        # plt.hlines(0, 0., df[x][len(df)-1], color='orange', linestyles='dashed')
         self.ax.set_xlabel(x)
         self.ax.set_ylabel(y)
         self.ax.set_title(title)
+        self.fig.tight_layout()
+
+        self.parameters = self.parameters_save
+
+    def overlay(self, df, y='', ymajor=0, params={}):
+        """
+        :param ymajor: multiple for major y-tick marks (0 for auto)
+        :param params: parameter dict to be passed to plot
+        :param df: pandas dataframe
+        :param y: name of y column
+        """
+
+        self.parameters = {**self.parameters, **params}
+        self.ncurve += 1
+        self.parameters['label'] = self.parameters['label'] + f' [{self.ncurve}]'
+
+        if self.overlay_axis:
+            self.overlay_axis.remove()
+
+        self.overlay_axis = self.ax.twinx()  # a second axes that shares the same x-axis
+
+        if y == '':
+            for idx, c in enumerate(df.columns):
+                if idx == self.default_y:
+                    y = c
+                    break
+
+        arts, = self.overlay_axis.plot(df[self.x_axis], df[y], 'o-', **self.parameters)
+        self.artists[self.ncurve] = arts
+
+        if ymajor != 0:
+            self.overlay_axis.yaxis.set_major_locator(plt.MultipleLocator(ymajor))
+        plt.grid(color='lightgrey')
+        self.overlay_axis.set_ylabel(y)
+        self.fig.tight_layout()
+
+        self.parameters = self.parameters_save
+
+    def clear(self, curve_number):
+        self.artists[curve_number].remove()
+        self.ax.legend()
+
+    def show_legend(self):
+        self.legend = self.ax.legend()
+
+    def remove_legend(self):
+        if self.legend is not None:
+            self.legend.remove()
 
 
 if __name__ == '__main__':
@@ -84,16 +141,11 @@ if __name__ == '__main__':
 
     snap1 = ks.SnapShot('TestData/snap19.ka')
     sd_df1 = pd.DataFrame(snap1.get_size_distribution(dictionary=True))
-    plot = XY_plot(sd_df1, xmajor=2, ymajor=2000, params={'linestyle': '-',
-                                                          'label': 'snap19',
-                                                          'color': 'r',
-                                                          'markerfacecolor': 'r'})
+    plot = XY_plot(params={'linestyle': '-', 'linewidth': 1., 'markersize': 0})
+    plot.add(sd_df1, xmajor=2, ymajor=2000, params={'label': 'snap19', 'color': 'r', 'markerfacecolor': 'r'})
     # show()
     snap2 = ks.SnapShot('TestData/snap98.ka')
     sd_df2 = pd.DataFrame(snap2.get_size_distribution(dictionary=True))
-    plot.add(sd_df2, xmajor=2, ymajor=2000, params={'linestyle': '-',
-                                                    'label': 'snap98',
-                                                    'color': 'g',
-                                                    'markerfacecolor': 'g'})
+    plot.add(sd_df2, xmajor=2, ymajor=2000, params={'label': 'snap98', 'color': 'g', 'markerfacecolor': 'g'})
     plot.ax.legend()
     show()
