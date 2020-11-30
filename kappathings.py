@@ -24,6 +24,31 @@ def shift(in_list, n=1):
     return new_list
 
 
+def cut_and_cup(c1, c2):
+    """
+    returns intersection and union of agent and bond set
+    """
+    agent_set1 = set()
+    agent_set2 = set()
+    bond_set1 = set()
+    bond_set2 = set()
+    for (agent1, site1), (agent2, site2) in c1.bonds:
+        a1 = c1.info[agent1]['sID'] + c1.info[agent1]['type']
+        a2 = c1.info[agent2]['sID'] + c1.info[agent2]['type']
+        agent_set1.add(a1)
+        agent_set1.add(a2)
+        b = sorted([(a1, site1), (a2, site2)], key=lambda i: i[0])
+        bond_set1.add(tuple(b))
+    for (agent1, site1), (agent2, site2) in c2.bonds:
+        a1 = c2.info[agent1]['sID'] + c2.info[agent1]['type']
+        a2 = c2.info[agent2]['sID'] + c2.info[agent2]['type']
+        agent_set2.add(a1)
+        agent_set2.add(a2)
+        b = sorted([(a1, site1), (a2, site2)], key=lambda i: i[0])
+        bond_set2.add(tuple(b))
+    return agent_set1 & agent_set2, agent_set1 | agent_set2, bond_set1 & bond_set2, bond_set1 | bond_set2
+
+
 class KappaComplex:
     """
     :param data: a JSON formatted input -- string or list -- with schema [  list of agents  ] as defined in
@@ -36,8 +61,10 @@ class KappaComplex:
             self.adjacency[name] = [ agent_names ]
                  self.info[name] = { 'id': identifier
                                      'type': agent_type
+                                     'sID': optional KaSim-assigned identifier
                                      'degree': int n }
-                    self.bonds   = { ( (agent1, site1), (agent2, site2) ) }  # a set
+                    self.bonds   = { ( (agent1, site1), (agent2, site2) ) }  # a set!
+
             where everything, except e, is of type string, and
             * the interface dictionary of an agent is sorted by site name (needs Python 3.7+)
             * agent names are unique, consisting of type + identifier, eg Axin.42. (including the last dot), where
@@ -59,9 +86,17 @@ class KappaComplex:
             self.composition (that's the sum formula, sorted by agent name)
     """
 
-    def __init__(self, data, count=0, normalize=False, randomize=False):
+    def __init__(self, data, count=0, normalize=False, randomize=False, minimal=False):
+        """
+        :param data: the Kappa expression (JSON or kappa)
+        :param count:
+        :param normalize:
+        :param randomize:
+        :param minimal: set to True, if you don't use the representation for graph matching
+        """
         # change these defs only if you know what you are doing
         self.symbols = r'[_~][a-zA-Z0-9_~+-]+|[a-zA-Z][a-zA-Z0-9_~+-]*'
+        self.sID = r'x[0-9]+:'
         self.bondsep = '@'
         self.idsep = ('.', '.')  # not any of '(?:[_~][a-zA-Z0-9_~+-]+|[a-zA-Z][a-zA-Z0-9_~+-]*)'
 
@@ -78,7 +113,7 @@ class KappaComplex:
         self.adjacency = {}
         self.info = {}
         self.bonds = set()
-        self.nbonds = {}   # nbonds[(a1, a2)] = n of bonds between a1 and a2 for a1 <= a2
+        self.nbonds = {}  # nbonds[(a1, a2)] = n of bonds between a1 and a2 for a1 <= a2
         self.name_list = []
         self.type_slice = {}  # dict of pairs
         self.navigation = {}
@@ -100,9 +135,14 @@ class KappaComplex:
         self.site_re = \
             re.compile(r'^' + site_name_re + r'(?=.*' + internal_state_re + r')?' + r'(?=.*' + binding_re + r')?.*')
         agent_name_re = r'(' + self.symbols + r')'
+        sID_re = r'(' + self.sID + r')?'
         agent_interface_re = r'\(([^()]*)\)'
+        # to dissect agents
         self.agent_re = \
-            re.compile(r'^' + agent_name_re + agent_interface_re + r'$')
+            re.compile(r'^' + sID_re + agent_name_re + agent_interface_re + r'$')
+        # to find all agents (hence groups are non-capturing), before dissecting them
+        self.agents_re = \
+            re.compile(r'(?:' + self.sID + r')?(?:' + self.symbols + r')' + r'\([^()]*\)')
 
         # produce an internal representation of the complex from json or kappa
         if data:
@@ -122,12 +162,6 @@ class KappaComplex:
         # sort name list by rarity (primary) and type (secondary)
         self.name_list = sorted(self.name_list,
                                 key=lambda i: (self.composition[self.info[i]['type']], self.info[i]['type']))
-        # get the slice indices for each type in the sorted name_list
-        start = 0
-        for a_type in self.composition.keys():
-            abundance = self.composition[a_type]
-            self.type_slice[a_type] = (start, start + abundance)
-            start += abundance
 
         if randomize:
             # this is to re-index the same complex in different ways;
@@ -137,16 +171,25 @@ class KappaComplex:
             # agent list will be lexicographically sorted /and has increasing identifier/
             self.permute_ids(self.normalize_ids())  # this also makes the bond list
 
-        # construct adjacency lists
-        self.get_adjacency_lists()
-        # assemble the navigation list (for rigid embeddings with kappamorph.py)
-        self.make_navigation_list()
+        if not minimal:
+            # get the slice indices for each type in the sorted name_list
+            start = 0
+            for a_type in self.composition.keys():
+                abundance = self.composition[a_type]
+                self.type_slice[a_type] = (start, start + abundance)
+                start += abundance
+
+            # construct adjacency lists
+            self.get_adjacency_lists()
+            # assemble the navigation list (for rigid embeddings with kappamorph.py)
+            self.make_navigation_list()
 
     def get_structure_from_json(self, data):
         """
         Given a complex in JSON snapshot format, construct the internal representation as in the class documentation.
         :param data: a JSON format (string or list) with schema [  list of agents  ] as defined in
                      kappasnap.KappaSnapShot
+        This will not parse KaSim-supplied IDs. Use _from_kappa() for that!
         """
 
         def parse_link(link):
@@ -180,7 +223,7 @@ class KappaComplex:
         if type(data) is str:  # otherwise data is already parsed
             data = json.loads(data)
         self.bonds = set()  # set of tuples ((agent1, site1), (agent2, site2))
-        this_complex = self.make_agent_names_unique(data)  # a list of 'agent' as per json schema
+        this_complex = self.assign_identifiers(data)  # a list of 'agent' as per json schema
         for a in this_complex:
             agent_name = a['node_type']
             agent_type, identifier = self.extract_identifier(a['node_type'])
@@ -220,26 +263,73 @@ class KappaComplex:
         :param data: a Kappa expression of the complex
         """
         self.counter = 0
-        interface_re = r'\([^()]*\)'
-        agent_re = self.symbols + interface_re  # probably not worth compiling; used only once
-
         expression = re.sub(r'\s+|\t+|\n+', ' ', data)  # remove line breaks and white matter
         # capture all agents
-        match = re.findall(agent_re, expression)
+        match = self.agents_re.findall(expression)
 
         for agent in match:
-            agent_type, identifier, interface = self.parse_agent(agent)
+            agent_type, identifier, agent_sID, interface = self.parse_agent(agent)
+            if agent_sID is None: agent_sID = ''
             agent_name = self.attach_identifier(agent_type, identifier)
             self.agents[agent_name] = interface
-            self.info[agent_name] = {'id': identifier, 'type': agent_type, 'degree': -1}
+            self.info[agent_name] = {'id': identifier, 'type': agent_type, 'sID': agent_sID, 'degree': -1}
 
         # replace bond ids with stub notation and get the set of bonds
         self.stubbify_bonds()
 
+    def parse_agent(self, agent_expression):
+        match = self.agent_re.match(agent_expression)
+        if not match:
+            exit('Invalid agent declaration <' + agent_expression + '>')
+        agent_sID = match.group(1)
+        agent_type = match.group(2)
+        self.counter += 1
+        identifier = str(self.counter)
+        interface = {}
+
+        # parse the agent interface
+        iface = match.group(3)
+        # since Kappa allows commas or whitespace as separators,
+        # swap all commas for spaces and split by whitespace
+        sites = iface.replace(',', ' ').split()
+        for item in sites:
+            try:
+                site_name, state, bond = self.parse_site(item)
+                interface[site_name] = {'state': state, 'bond': bond}
+                # sort interface by key
+                # interface = dict(sorted(interface.items()))
+            except:
+                exit('Could not parse site ' + item + ' in ' + agent_expression)
+
+        return agent_type, identifier, agent_sID, interface
+
+    def parse_site(self, site_expression):
+        match = self.site_re.match(site_expression)
+        if not match:
+            exit('Could not parse site ' + site_expression)
+        # return site name, internal state and binding state (without parentheses)
+        site_name = match.group(1)
+        if match.group(2):  # the modification state; it may be absent, so we need to check
+            internal_state = match.group(2)[1:-1]  # remove parens
+        else:
+            internal_state = '#'  # don't care
+
+        binding_state = '#'  # don't care (absent) by default
+        if match.group(3):  # there is an explicit binding state
+            binding_expression = match.group(3)[1:-1]  # remove parens
+            match = self.binding_state_re.match(binding_expression)  # continue parsing
+            if match:
+                binding_state = match.group(0)  # either '.' or '#' or number or stub
+                # warning: if the site name starts with '_' we have a problem; fix later...
+            else:
+                exit('Could not parse binding state ' + binding_expression)
+
+        return site_name, internal_state, binding_state
+
     def stubbify_bonds(self):
         """
         replace numeric bond labels with unique bond stubs
-        generate the set self.bonds
+        generate the bond set (self.bonds)
         """
         # If we are dealing with an object that contains a bond pattern, the degree of a node has no meaning.
         # The degree is used only for VF2 isomorphism checking, but not for pattern embeddings.
@@ -307,54 +397,6 @@ class KappaComplex:
             s = s[:-1] + '), '
         return s[:-2]
 
-    def parse_agent(self, agent_expression):
-        match = self.agent_re.match(agent_expression)
-        if not match:
-            exit('Invalid agent declaration <' + agent_expression + '>')
-        agent_type = match.group(1)
-        self.counter += 1
-        identifier = str(self.counter)
-        interface = {}
-
-        # parse the agent interface
-        iface = match.group(2)
-        # since Kappa allows commas or whitespace as separators,
-        # swap all commas for spaces and split by whitespace
-        sites = iface.replace(',', ' ').split()
-        for item in sites:
-            try:
-                site_name, state, bond = self.parse_site(item)
-                interface[site_name] = {'state': state, 'bond': bond}
-                # sort interface by key
-                # interface = dict(sorted(interface.items()))
-            except:
-                exit('Could not parse site ' + item + ' in ' + agent_expression)
-
-        return agent_type, identifier, interface
-
-    def parse_site(self, site_expression):
-        match = self.site_re.match(site_expression)
-        if not match:
-            exit('Could not parse site ' + site_expression)
-        # return site name, internal state and binding state (without parentheses)
-        site_name = match.group(1)
-        if match.group(2):  # the modification state; it may be absent, so we need to check
-            internal_state = match.group(2)[1:-1]  # remove parens
-        else:
-            internal_state = '#'  # don't care
-
-        binding_state = '#'  # don't care (absent) by default
-        if match.group(3):  # there is an explicit binding state
-            binding_expression = match.group(3)[1:-1]  # remove parens
-            match = self.binding_state_re.match(binding_expression)  # continue parsing
-            if match:
-                binding_state = match.group(0)  # either '.' or '#' or number or stub
-                # warning: if the site name starts with '_' we have a problem; fix later...
-            else:
-                exit('Could not parse binding state ' + binding_expression)
-
-        return site_name, internal_state, binding_state
-
     def get_adjacency_lists(self):
         """
         construct the adjacency views
@@ -399,7 +441,7 @@ class KappaComplex:
             self.navigation[(a1, a2)] = s1
             self.navigation[(a2, a1)] = s2
 
-    def make_agent_names_unique(self, complex):  # complex is in JSON format
+    def assign_identifiers(self, complex):  # complex is in JSON format
         """
         Generate unique names for the agents of a complex. The names are of the form 'type LDEL identifier RDEL',
         with {L,R}DEL delimiters, by default '.' (dot). For example: APC.2., which means the agent is of type APC
@@ -447,11 +489,12 @@ class KappaComplex:
             name1 = self.name_list[i]
             id1 = self.info[name1]['id']
             type1 = self.info[name1]['type']
+            sID = self.info[name1]['sID']
             new_id1 = permute[id1]
             new_name1 = self.attach_identifier(type1, new_id1)
             self.name_list[i] = new_name1
             renamed[new_name1] = {}
-            info[new_name1] = {'id': new_id1, 'type': type1, 'degree': self.info[name1]['degree']}
+            info[new_name1] = {'id': new_id1, 'type': type1, 'sID': sID, 'degree': self.info[name1]['degree']}
             for site1 in self.agents[name1]:
                 renamed[new_name1][site1] = {}
                 renamed[new_name1][site1]['state'] = self.agents[name1][site1]['state']
@@ -552,7 +595,7 @@ class KappaComplex:
                 interface += s + '{' + iface[s]['state'] + '}' + '[' + iface[s]['bond'] + '] '
             if not self.is_pattern:
                 info += f"[d: {self.info[name]['degree']}] "
-            info += name + '(' + interface[:-1] + ')\n'
+            info += self.info[name]['sID'] + name + '(' + interface[:-1] + ')\n'
         info += f'{len(self.bonds)} specific bonds:\n'
         for (a1, s1), (a2, s2) in self.bonds:
             info += a1 + self.bondsep + s1 + ' <-> ' + a2 + self.bondsep + s2 + '\n'
@@ -573,12 +616,13 @@ class KappaComplex:
                 iface = self.agents[name]
                 for s in iface:
                     interface += s + '{' + iface[s]['state'] + '}' + '[' + iface[s]['bond'] + '] '
-                info += name + '(' + interface[:-1] + '), '
+                info += self.info[name]['sID'] + name + '(' + interface[:-1] + '), '
             print(info[:-2])  # remove last comma+blank
         else:
             print(self.kappa_expression())
 
-    def __iter__(self): return iter(self.name_list)
+    def __iter__(self):
+        return iter(self.name_list)
 
     # Implementing __next__ as below does not work... The reason is that breaking out of a loop does not
     # reset self.next! Use Python's iter() function as above.
@@ -609,82 +653,87 @@ class KappaComplex:
 # -----------------------------------------------------------------
 
 if __name__ == '__main__':
-
     import time
+
+    # e1 = " x222667:P(a1[.] a2[.] a3[.] d[1]), x251065:P(a1[.] a2[.] a3[.] d[1])"
+    # e2 = " x22266:P(a1[.] a2[.] a3[.] d[1]), x251065:P(a1[.] a2[.] a3[.] d[1])"
+    # agents, bonds = intersect_complexes(KappaComplex(e1), KappaComplex(e2))
+    # print(agents)
+    # print(bonds)
 
     # usage scenarios
 
-    print("from Kappa:")
-    # input a simple Kappa string to create the KappaComplex representation
-    data = ' A(o[1], p[2] t{p}[3]), B(x[1] y[2] z[.]), C(w[3], y[z.B])'
-    c = KappaComplex(data, count=175, normalize=True)
-    # print it
-    print(c)
-    # short version
-    c.show()
-
-    print(f'count: {c.count}')
-    print(f'size: {c.size}')
-    print(f'sum formula: {c.sum_formula}')
-    print('')
-
-    print("from JSON:")
-    # input a JSON string of the same complex as above
-    data = '[{"node_type":"A","node_sites":[{"site_name":"o","site_type":["port",{"port_links":[[[0,1],0]],' \
-           '"port_states":[]}]},{"site_name":"p","site_type":["port",{"port_links":[[[0,1],1]],"port_states":[]}]},' \
-           '{"site_name":"t","site_type":["port",{"port_links":[[[0,2],0]],"port_states":["p"]}]}]},' \
-           '{"node_type":"B","node_sites":[{"site_name":"x","site_type":["port",{"port_links":[[[0,0],0]],' \
-           '"port_states":[]}]},{"site_name":"y","site_type":["port",{"port_links":[[[0,0],1]],' \
-           '"port_states":[]}]},{"site_name":"z","site_type":["port",{"port_links":[],"port_states":[]}]}]},' \
-           '{"node_type":"C","node_sites":[{"site_name":"w","site_type":["port",{"port_links":[[[0,0],2]],' \
-           '"port_states":[]}]}]}]'
-    c = KappaComplex(data, normalize=True)
-    print(c)
+    # print("from Kappa:")
+    # # input a simple Kappa string to create the KappaComplex representation
+    # data = ' A(o[1], p[2] t{p}[3]), B(x[1] y[2] z[.]), C(w[3], y[z.B])'
+    # c = KappaComplex(data, count=175, normalize=True)
+    # # print it
+    # print(c)
+    # # short version
+    # c.show()
     #
-    print("from file:")
-    # input a file containing one (large) Kappa string
-    line = open('TestData/bigly.ka', 'r').read()
-    # remove newlines that might occur in the file
-    line = re.sub(r'\n+', ' ', line)
-    # create a KappaComplex with whatever assignment of node identifiers arises
-    # (that's the normalize=False flag).
-    c1 = KappaComplex(line)
-    print(c1)
-    print("list of nodes:")
-    # a list of node names of the complex
-    print(c1.nodes())
-    # the complex appears as an iterable
-    print('iterating through the nodes of the complex and showing adjacency views')
-    # testing __iter__ and __getitem__ methods
-    for n in c1:
-        print(f'adjacency of {n}: {c1[n]}')
-    print('')
+    # print(f'count: {c.count}')
+    # print(f'size: {c.size}')
+    # print(f'sum formula: {c.sum_formula}')
+    # print('')
     #
-    print("normalize identifiers:")
-    # "normalize" the identifiers, which means: when node types are sorted lexicographically,
-    # nodes are assigned successively increasing identifiers.
-    c2 = KappaComplex(line, normalize=True)
-    print(c2)
-
-    print("randomly permute identifiers:")
-    # assign identifiers randomly; this is useful for testing the isomorphism implementation
-    c3 = KappaComplex(line, randomize=True)
-    print(c3)
-
-    print("list of nodes:")
-    # a list of node names of the complex
-    print(c3.nodes())
-    # the complex appears as an iterable
-    print('iterating through the nodes of the complex and showing adjacency views')
-    # testing __iter__ and __getitem__ methods
-    for n in c3:
-        print(f'adjacency of {n}: {c3[n]}')
-    print('')
-    print(c3.sum_formula)
-    print(c3.type_slice)
-    for a_type in c3.type_slice.keys():
-        (start, stop) = c3.type_slice[a_type]
-        print(c3.name_list[start:stop])
+    # print("from JSON:")
+    # # input a JSON string of the same complex as above
+    # data = '[{"node_type":"A","node_sites":[{"site_name":"o","site_type":["port",{"port_links":[[[0,1],0]],' \
+    #        '"port_states":[]}]},{"site_name":"p","site_type":["port",{"port_links":[[[0,1],1]],"port_states":[]}]},' \
+    #        '{"site_name":"t","site_type":["port",{"port_links":[[[0,2],0]],"port_states":["p"]}]}]},' \
+    #        '{"node_type":"B","node_sites":[{"site_name":"x","site_type":["port",{"port_links":[[[0,0],0]],' \
+    #        '"port_states":[]}]},{"site_name":"y","site_type":["port",{"port_links":[[[0,0],1]],' \
+    #        '"port_states":[]}]},{"site_name":"z","site_type":["port",{"port_links":[],"port_states":[]}]}]},' \
+    #        '{"node_type":"C","node_sites":[{"site_name":"w","site_type":["port",{"port_links":[[[0,0],2]],' \
+    #        '"port_states":[]}]}]}]'
+    # c = KappaComplex(data, normalize=True)
+    # print(c)
+    # #
+    # print("from file:")
+    # # input a file containing one (large) Kappa string
+    # line = open('TestData/bigly.ka', 'r').read()
+    # # remove newlines that might occur in the file
+    # line = re.sub(r'\n+', ' ', line)
+    # # create a KappaComplex with whatever assignment of node identifiers arises
+    # # (that's the normalize=False flag).
+    # c1 = KappaComplex(line)
+    # print(c1)
+    # print("list of nodes:")
+    # # a list of node names of the complex
+    # print(c1.nodes())
+    # # the complex appears as an iterable
+    # print('iterating through the nodes of the complex and showing adjacency views')
+    # # testing __iter__ and __getitem__ methods
+    # for n in c1:
+    #     print(f'adjacency of {n}: {c1[n]}')
+    # print('')
+    # #
+    # print("normalize identifiers:")
+    # # "normalize" the identifiers, which means: when node types are sorted lexicographically,
+    # # nodes are assigned successively increasing identifiers.
+    # c2 = KappaComplex(line, normalize=True)
+    # print(c2)
+    #
+    # print("randomly permute identifiers:")
+    # # assign identifiers randomly; this is useful for testing the isomorphism implementation
+    # c3 = KappaComplex(line, randomize=True)
+    # print(c3)
+    #
+    # print("list of nodes:")
+    # # a list of node names of the complex
+    # print(c3.nodes())
+    # # the complex appears as an iterable
+    # print('iterating through the nodes of the complex and showing adjacency views')
+    # # testing __iter__ and __getitem__ methods
+    # for n in c3:
+    #     print(f'adjacency of {n}: {c3[n]}')
+    # print('')
+    # print(c3.sum_formula)
+    # print(c3.type_slice)
+    # for a_type in c3.type_slice.keys():
+    #     (start, stop) = c3.type_slice[a_type]
+    #     print(c3.name_list[start:stop])
 
     # print("big stuff from file:")
     # line = open('TestData/monster.ka', 'r').read()
