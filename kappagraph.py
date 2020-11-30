@@ -17,18 +17,14 @@ class KappaGraph:
             name = next(iter(komplex.agents))
             self.nxGraph.add_node(name)
         else:
-            eattr = {}
             if komplex.is_multigraph():
                 self.nxGraph = nx.MultiGraph()
                 self.multigraph = True
-                for (a1, s1), (a2, s2) in komplex.bonds:
-                    txt = a1 + '@' + s1 + '--' + a2 + '@' + s2
-                    self.nxGraph.add_edge(a1, a2, bond=txt)
             else:
                 self.nxGraph = nx.Graph()
-                for (a1, s1), (a2, s2) in komplex.bonds:
-                    txt = a1 + '@' + s1 + '--' + a2 + '@' + s2
-                    self.nxGraph.add_edge(a1, a2, bond=txt)
+            for (a1, s1), (a2, s2) in komplex.bonds:
+                txt = a1 + '@' + s1 + '--' + a2 + '@' + s2
+                self.nxGraph.add_edge(a1, a2, bond=txt)
 
         # set node attributes
         nattr = {}
@@ -120,7 +116,7 @@ class KappaGraph:
             self.nxGraph.remove_node(node)
 
     def write_dot(self, filename='complex.dot', uniform=True, shape='oval'):
-        palette = ('blue', 'green', 'red', 'cyan', 'magenta', 'yellow', 'khaki', 'silver')
+        palette = ('blue', 'red', 'green', 'cyan', 'magenta', 'yellow', 'khaki', 'silver')
         shapelette = ('circle', 'triangle', 'polygon', 'oval', 'diamond', 'house', 'hexagon',
                       'parallelogram', 'pentagon', 'rectangle')
         # assign colors to nodes

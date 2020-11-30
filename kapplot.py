@@ -89,8 +89,9 @@ class XY_plot:
 
         self.parameters = self.parameters_save
 
-    def overlay(self, df, y='', ymajor=0, params={}):
+    def overlay(self, df, y='', ymajor=0, params={}, grid=False):
         """
+        :param grid:
         :param ymajor: multiple for major y-tick marks (0 for auto)
         :param params: parameter dict to be passed to plot
         :param df: pandas dataframe
@@ -117,7 +118,8 @@ class XY_plot:
 
         if ymajor != 0:
             self.overlay_axis.yaxis.set_major_locator(plt.MultipleLocator(ymajor))
-        plt.grid(color='lightgrey')
+        if grid:
+            plt.grid(color='lightgrey')
         self.overlay_axis.set_ylabel(y)
         self.fig.tight_layout()
 
