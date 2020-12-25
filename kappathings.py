@@ -32,20 +32,31 @@ def cut_and_cup(c1, c2):
     agent_set2 = set()
     bond_set1 = set()
     bond_set2 = set()
-    for (agent1, site1), (agent2, site2) in c1.bonds:
-        a1 = c1.info[agent1]['sID'] + c1.info[agent1]['type']
-        a2 = c1.info[agent2]['sID'] + c1.info[agent2]['type']
+
+    if len(c1.bonds) == 0:
+        a1 = c1.info[c1.name_list[0]]['sID'] + c1.info[c1.name_list[0]]['type']
         agent_set1.add(a1)
-        agent_set1.add(a2)
-        b = sorted([(a1, site1), (a2, site2)], key=lambda i: i[0])
-        bond_set1.add(tuple(b))
-    for (agent1, site1), (agent2, site2) in c2.bonds:
-        a1 = c2.info[agent1]['sID'] + c2.info[agent1]['type']
-        a2 = c2.info[agent2]['sID'] + c2.info[agent2]['type']
-        agent_set2.add(a1)
+    else:
+        for (agent1, site1), (agent2, site2) in c1.bonds:
+            a1 = c1.info[agent1]['sID'] + c1.info[agent1]['type']
+            a2 = c1.info[agent2]['sID'] + c1.info[agent2]['type']
+            agent_set1.add(a1)
+            agent_set1.add(a2)
+            b = sorted([(a1, site1), (a2, site2)], key=lambda i: i[0])
+            bond_set1.add(tuple(b))
+
+    if len(c2.bonds) == 0:
+        a2 = c2.info[c2.name_list[0]]['sID'] + c2.info[c2.name_list[0]]['type']
         agent_set2.add(a2)
-        b = sorted([(a1, site1), (a2, site2)], key=lambda i: i[0])
-        bond_set2.add(tuple(b))
+    else:
+        for (agent1, site1), (agent2, site2) in c2.bonds:
+            a1 = c2.info[agent1]['sID'] + c2.info[agent1]['type']
+            a2 = c2.info[agent2]['sID'] + c2.info[agent2]['type']
+            agent_set2.add(a1)
+            agent_set2.add(a2)
+            b = sorted([(a1, site1), (a2, site2)], key=lambda i: i[0])
+            bond_set2.add(tuple(b))
+
     return agent_set1 & agent_set2, agent_set1 | agent_set2, bond_set1 & bond_set2, bond_set1 | bond_set2
 
 
