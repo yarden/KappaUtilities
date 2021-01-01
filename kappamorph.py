@@ -574,6 +574,8 @@ class SiteGraphMatcher:
     def __init__(self):
         self.p_start = ''
         self.h_start = ''
+        # tentative subgraph embedding; if pattern lacks a bond that host has, it's OK
+        self.sub = False
         self.mapping = {}
 
     def isomorphic(self, host, pattern):
@@ -630,6 +632,12 @@ class SiteGraphMatcher:
             if host.composition[node_type] < pattern.composition[node_type]:
                 return False
         return self.morphism(host, pattern)
+
+    def sub_embed(self, host, pattern):
+        self.sub = True
+        answer = self.embed(host, pattern)
+        self.sub = False
+        return answer
 
     def morphism(self, host, pattern):
         start, stop = host.type_slice[pattern.rarest_type]
@@ -753,7 +761,8 @@ class SiteGraphMatcher:
 
                 if p_bond == '.':
                     if h_bond != '.':
-                        return False
+                        if not self.sub:
+                            return False
                 elif '@' in p_bond:  # specific bond
                     if not ('@' in h_bond):
                         return False
