@@ -8,23 +8,109 @@ import plotly.graph_objects as go
 import kappagraph as kg
 import traceback
 
+import sys
+from PyQt5.QtWidgets import QDialog, QApplication, QVBoxLayout, QLineEdit, QTextBrowser
+
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
+
+
+def show():
+    plt.show(block=False)
+
+
+class Window(QDialog):
+    def __init__(self, fig, parent=None, rows=1, cols=1, size=(10, 10)):
+        super(Window, self).__init__(parent)
+
+        # Canvas Widget that displays the figure
+        self.canvas = FigureCanvas(fig)
+
+        # Navigation widget
+        # it takes the Canvas widget and a parent
+        self.toolbar = NavigationToolbar(self.canvas, self)
+
+        # self.lineEdit = QLineEdit()
+        # self.textBrowser = QTextBrowser()
+
+        # set the layout
+        layout = QVBoxLayout()
+        layout.addWidget(self.toolbar)
+        layout.addWidget(self.canvas)
+        # layout.addWidget(self.textBrowser)
+        # layout.addWidget(self.lineEdit)
+        self.setLayout(layout)
+        # self.lineEdit.returnPressed.connect(self.process)
+
+    # def process(self):
+    #     userInput = self.lineEdit.text()
+    #     if userInput == "Comment vas tu?":
+    #         self.textBrowser.append("Très bien.")
+    #     else:
+    #         self.textBrowser.append("What?")
+    #     self.lineEdit.clear()
+
+
+class Canvas:
+    def __init__(self, rows=1, cols=1, size=(10, 10), qt5=False, name=None):
+        if name is None:
+            (filename, line_number, function_name, text) = traceback.extract_stack()[-2]
+            name = text[:text.find('=')].strip()
+        self.name = name
+        self.figure = None
+        self.qt = None
+        self.rows = rows
+        self.cols = cols
+
+        # axs is a numpy ndarray
+        self.figure, self.axes = plt.subplots(nrows=rows, ncols=cols, figsize=size, squeeze=False, frameon=False)
+        for i in range(0, self.rows):
+            for j in range(0, self.cols):
+                self.axes[i, j].axis("off")
+                self.axes[i, j].spines["top"].set_visible(False)
+                self.axes[i, j].spines["right"].set_visible(False)
+                self.axes[i, j].spines["left"].set_visible(False)
+                self.axes[i, j].spines["bottom"].set_visible(False)
+
+        if qt5:
+            self.qt = Window(self.figure, rows=rows, cols=cols, size=size)
+
+    def number_of_plot_areas(self):
+        return self.rows * self.cols
+
+    def __del__(self):
+        if self.figure is not None:
+            plt.close(self.figure)
+        # print(f'{self.name} deleted')
+
+    def clear(self, i, j):  # assuming i and j start with 1...
+        self.axes[i-1, j-1].clear()
+
+    # def panel2index(self, panel):  # starting with 1,1
+    #     return (panel[0] - 1) * self.cols + panel[1]
+    #
+    # def index2panel(self, i):  # starting with 1
+    #     return int(i / self.cols), i - int(i / self.cols)
+
 
 class Renderer:
-    def __init__(self, komplex, prog='neato', node_info=True, name=None):
+    def __init__(self, komplex, canvas=None, prog='neato', node_info=False):
         """
         In establishing a Renderer object, a layout of nodes is triggered.
         Subsequently, various display methods can be invoked.
 
-        :param komplex:
+        :param canvas:
         :param komplex:
         :param prog: any of neato, dot, twopi, circo, fdp, nop, wc, acyclic, gvpr, gvcolor, ccomps,
                             sccmap, tred, sfdp, unflatten
         :param node_info:
         """
-        if name is None:
-            (filename, line_number, function_name, text) = traceback.extract_stack()[-2]
-            name = text[:text.find('=')].strip()
-        self.name = name
+
+        if canvas is None:
+            self.canvas = Canvas()
+        else:
+            self.canvas = canvas
+        self.ax = None
 
         self.Graph = kg.KappaGraph(komplex)
         self.nxGraph = self.Graph.nxGraph
@@ -52,8 +138,6 @@ class Renderer:
                            'edge_color': 'black',
                            'width': 1
                            }
-        self.fig = None
-        self.ax = None
 
         # assign colors to node types
         self.type_color = {}
@@ -71,10 +155,6 @@ class Renderer:
         # layout
         self.positions = nx.nx_agraph.graphviz_layout(self.nxGraph, prog=prog)
 
-    def __del__(self):
-        plt.close(self.fig)
-        # print(f'{self.name} deleted')
-
     def layout(self):
         self.positions = nx.nx_agraph.graphviz_layout(self.nxGraph, prog='neato')
         self.nx_options['node_color'] = []
@@ -88,10 +168,13 @@ class Renderer:
     def set_html_palette(self, palette):
         self.html_palette = palette
 
-    def render(self, labels='short', node_size=400, font_size=9, line_width=1, edge_color='gray'):
+    def render(self, panel=(1, 1), labels='short', node_size=20, font_size=9, line_width=1, edge_color='gray',
+               legend=True):
         """
         Render a networkx graph with matplotlib.
 
+        :param panel:
+        :param legend:
         :param edge_color:
         :param line_width:
         :param labels:
@@ -116,12 +199,9 @@ class Renderer:
         self.nx_options['edge_color'] = edge_color
         self.nx_options['width'] = line_width  # edge width
 
-        # we clear the whole figure since we are drawing the whole network
-        if self.ax:
-            plt.close(self.fig)
-            self.fig, self.ax = plt.subplots()
-        else:
-            self.fig, self.ax = plt.subplots()
+        # we clear the panel since we are drawing the whole network
+        self.ax = self.canvas.axes[panel[0]-1, panel[1]-1]
+        self.ax.clear()
 
         nx.draw_networkx(self.nxGraph, pos=self.positions, ax=self.ax, **self.nx_options)
 
@@ -129,7 +209,8 @@ class Renderer:
         items = [Line2D([0, 1], [0, 1], color='white', marker='o', markersize=7, markerfacecolor=clr, linewidth=0)
                  for clr in self.legend_colors]
         labels = [f'{node}' for node in self.type_color.keys()]
-        self.ax.legend(items, labels)
+        if legend:
+            self.ax.legend(items, labels)
 
     def color_edgelists(self, edge_list=[], line_width=1, edge_color='r'):
         # to unify handling, convert to a list of lists (such as coming from a cycle basis)
@@ -185,17 +266,12 @@ class Renderer:
         remaining_edges = [tuple(x) for x in edges]
         nx.draw_networkx_edges(self.nxGraph, self.positions, ax=self.ax, edgelist=remaining_edges, **self.nx_options)
 
-    def show(self, filename=''):
-        if filename:
-            self.fig.savefig(filename)
-        else:
-            plt.show(block=False)
-
     def remove_all_edges(self):
         for artist in self.ax.get_children():
             if isinstance(artist, artcoll.LineCollection):
                 artist.remove()
 
+    # outdated at this time...
     def html_render(self, filename='', node_size=15, line_width=1, cycle=[]):
         """
         Render a networkx graph with plotly.
@@ -363,19 +439,48 @@ if __name__ == '__main__':
 
     # usage scenarios
 
-    line = open('TestData/bigly.ka', 'r').read()
+    # line = open('TestData/bigly.ka', 'r').read()
     # remove newlines that might occur in the file
-    line = re.sub(r'\n+', ' ', line)
+    # line = re.sub(r'\n+', ' ', line)
     # create a KappaComplex with whatever assignment of node identifiers arises
     # (that's the normalized=False flag).
-    c1 = kt.KappaComplex(line, normalize=True)
-    print(c1)
-    print(f'is multi-graph: {c1.is_multigraph()}')
-    # write_dot(c1, 'complex.dot')
-    r = Renderer(c1)
-    r.render(node_size=10, labels='none')
-    r.show()
-    r.html_render()
+    line = "A(l[19] r[.] p[2]), A(l[53] r[19] p[42]), A(l[37] r[53] p[45]), A(l[.] r[37] p[29]), P(a1[3] a2[51] a3[" \
+           "29] d[.]), A(l[20] r[.] p[3]), A(l[.] r[20] p[27]), P(a1[27] a2[.] a3[.] d[44]), P(a1[.] a2[.] a3[.] d[" \
+           "44]), A(l[.] r[.] p[51]), P(a1[14] a2[.] a3[45] d[22]), A(l[24] r[.] p[14]), A(l[.] r[24] p[50]), " \
+           "P(a1[50] a2[.] a3[30] d[.]), A(l[13] r[16] p[30]), A(l[.] r[13] p[21]), P(a1[21] a2[35] a3[1] d[9]), " \
+           "A(l[.] r[.] p[35]), A(l[.] r[26] p[1]), A(l[26] r[.] p[32]), P(a1[32] a2[.] a3[.] d[9]), A(l[16] r[54] p[" \
+           ".]), A(l[54] r[38] p[40]), A(l[38] r[.] p[7]), P(a1[.] a2[.] a3[7] d[52]), P(a1[18] a2[.] a3[4] d[52]), " \
+           "A(l[.] r[.] p[18]), A(l[23] r[.] p[4]), A(l[49] r[23] p[47]), A(l[28] r[49] p[11]), A(l[6] r[28] p[31]), " \
+           "A(l[.] r[6] p[12]), P(a1[.] a2[12] a3[.] d[.]), P(a1[.] a2[31] a3[.] d[15]), P(a1[.] a2[5] a3[.] d[15]), " \
+           "A(l[.] r[.] p[5]), P(a1[8] a2[.] a3[11] d[36]), A(l[.] r[39] p[8]), A(l[39] r[.] p[25]), P(a1[41] a2[.] " \
+           "a3[25] d[33]), A(l[.] r[.] p[41]), P(a1[.] a2[43] a3[.] d[33]), A(l[.] r[46] p[43]), A(l[46] r[.] p[10]), " \
+           "P(a1[10] a2[.] a3[.] d[22]), P(a1[34] a2[.] a3[.] d[36]), A(l[.] r[.] p[34]), P(a1[.] a2[47] a3[.] d[.]), " \
+           "P(a1[.] a2[40] a3[42] d[17]), P(a1[48] a2[2] a3[.] d[17]), A(l[.] r[.] p[48]) "
+    line2 = "A(l[.] r[4] p[1]), A(l[4] r[.] p[3]), P(a1[3] a2[1] a3[.] d[2]), P(a1[.] a2[.] a3[.] d[2])"
+    c1 = kt.KappaComplex(line)
+
+    # r = Renderer(c1)
+    # r.render(labels='no', node_size=20, font_size=9, line_width=1, edge_color='gray')
+    # show()
+
+    c2 = kt.KappaComplex(line2)
+
+    plt.ion()
+    canvas = Canvas(2, 2)
+    r = Renderer(c1, canvas)
+    r2 = Renderer(c2, canvas)
+    r.render((1, 2), labels='no', node_size=20, font_size=9, line_width=1, edge_color='gray')
+    input()
+    r.render((2, 1), labels='no', node_size=20, font_size=9, line_width=1, edge_color='gray')
+    input()
+    r2.render((2, 1), labels='no', node_size=20, font_size=9, line_width=1, edge_color='gray')
+    input()
+    r.render((2, 2), labels='no', node_size=20, font_size=9, line_width=1, edge_color='gray')
+    input()
+
+    # r.render(node_size=10, labels='none')
+    # r.show()
+    # r.html_render()
     # r.html_render(filename='complex.html')
     # r.nx_render(c1, prog='sfdp', node_size=80, font_size=4)
     # r.nx_render(c1, prog='fdp', node_size=80, font_size=4)
@@ -383,3 +488,14 @@ if __name__ == '__main__':
     # r.nx_render(c1, prog='twopi', node_size=80, font_size=4)
     # r.nx_render(c1, prog='dot', node_size=80, font_size=4)
     # r.nx_render(c1, prog='circo', node_size=80, font_size=4)
+
+    # app = QApplication(sys.argv)
+    # canvas = Canvas(2, 2, qt5=True)
+    # r = Renderer(c1, canvas)
+    # r2 = Renderer(c2, canvas)
+    # r.render((1, 2), labels='no', node_size=20, font_size=9, line_width=1, edge_color='gray')
+    # r.render((2, 1), labels='no', node_size=20, font_size=9, line_width=1, edge_color='gray')
+    # r2.render((2, 1), labels='no', node_size=20, font_size=9, line_width=1, edge_color='gray')
+    # r.render((2, 2), labels='no', node_size=20, font_size=9, line_width=1, edge_color='gray')
+    # canvas.qt.show()
+    # sys.exit(app.exec_())
