@@ -86,11 +86,13 @@ class Canvas:
     def clear(self, i, j):  # assuming i and j start with 1...
         self.axes[i-1, j-1].clear()
 
-    # def panel2index(self, panel):  # starting with 1,1
-    #     return (panel[0] - 1) * self.cols + panel[1]
-    #
-    # def index2panel(self, i):  # starting with 1
-    #     return int(i / self.cols), i - int(i / self.cols)
+    def panel2index(self, panel):  # starting with 1,1
+        return (panel[0] - 1) * self.cols + panel[1]
+
+    def index2panel(self, n):  # starting with 1
+        i = -(- n // self.cols)
+        j = n - self.cols * (i - 1)
+        return i, j
 
 
 class Renderer:
@@ -169,10 +171,12 @@ class Renderer:
         self.html_palette = palette
 
     def render(self, panel=(1, 1), labels='short', node_size=20, font_size=9, line_width=1, edge_color='gray',
-               legend=True):
+               legend=True, title="", title_font_size=10):
         """
         Render a networkx graph with matplotlib.
 
+        :param title_font_size:
+        :param title:
         :param panel:
         :param legend:
         :param edge_color:
@@ -199,18 +203,21 @@ class Renderer:
         self.nx_options['edge_color'] = edge_color
         self.nx_options['width'] = line_width  # edge width
 
-        # we clear the panel since we are drawing the whole network
         self.ax = self.canvas.axes[panel[0]-1, panel[1]-1]
+        # we clear the panel since we are drawing the whole network
         self.ax.clear()
 
         nx.draw_networkx(self.nxGraph, pos=self.positions, ax=self.ax, **self.nx_options)
 
         # the legend
-        items = [Line2D([0, 1], [0, 1], color='white', marker='o', markersize=7, markerfacecolor=clr, linewidth=0)
-                 for clr in self.legend_colors]
-        labels = [f'{node}' for node in self.type_color.keys()]
         if legend:
+            items = [Line2D([0, 1], [0, 1], color='white', marker='o', markersize=7, markerfacecolor=clr, linewidth=0)
+                     for clr in self.legend_colors]
+            labels = [f'{node}' for node in self.type_color.keys()]
             self.ax.legend(items, labels)
+
+        if title:
+            self.ax.set_title(title, fontsize=title_font_size)
 
     def color_edgelists(self, edge_list=[], line_width=1, edge_color='r'):
         # to unify handling, convert to a list of lists (such as coming from a cycle basis)
@@ -469,14 +476,14 @@ if __name__ == '__main__':
     canvas = Canvas(2, 2)
     r = Renderer(c1, canvas)
     r2 = Renderer(c2, canvas)
-    r.render((1, 2), labels='no', node_size=20, font_size=9, line_width=1, edge_color='gray')
-    input()
+    r.render((1, 2), labels='no', node_size=20, font_size=9, line_width=1, edge_color='gray', title="t=0.37")
+    # input()
     r.render((2, 1), labels='no', node_size=20, font_size=9, line_width=1, edge_color='gray')
-    input()
+    # input()
     r2.render((2, 1), labels='no', node_size=20, font_size=9, line_width=1, edge_color='gray')
-    input()
+    # input()
     r.render((2, 2), labels='no', node_size=20, font_size=9, line_width=1, edge_color='gray')
-    input()
+    # input()
 
     # r.render(node_size=10, labels='none')
     # r.show()
