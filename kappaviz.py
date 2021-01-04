@@ -96,23 +96,19 @@ class Canvas:
 
 
 class Renderer:
-    def __init__(self, komplex, canvas=None, prog='neato', node_info=False):
+    def __init__(self, komplex, prog='neato', node_info=False):
         """
         In establishing a Renderer object, a layout of nodes is triggered.
         Subsequently, various display methods can be invoked.
 
-        :param canvas:
         :param komplex:
         :param prog: any of neato, dot, twopi, circo, fdp, nop, wc, acyclic, gvpr, gvcolor, ccomps,
                             sccmap, tred, sfdp, unflatten
         :param node_info:
         """
 
-        if canvas is None:
-            self.canvas = Canvas()
-        else:
-            self.canvas = canvas
         self.ax = None
+        self.figure = None
 
         self.Graph = kg.KappaGraph(komplex)
         self.nxGraph = self.Graph.nxGraph
@@ -157,6 +153,10 @@ class Renderer:
         # layout
         self.positions = nx.nx_agraph.graphviz_layout(self.nxGraph, prog=prog)
 
+    def __del__(self):
+        if self.figure is not None:
+            plt.close(self.figure)
+
     def layout(self):
         self.positions = nx.nx_agraph.graphviz_layout(self.nxGraph, prog='neato')
         self.nx_options['node_color'] = []
@@ -170,11 +170,23 @@ class Renderer:
     def set_html_palette(self, palette):
         self.html_palette = palette
 
-    def render(self, panel=(1, 1), labels='short', node_size=20, font_size=9, line_width=1, edge_color='gray',
-               legend=True, title="", title_font_size=10):
+    def render(self,
+               canvas=None,
+               panel=(1, 1),
+               labels='short',
+               node_size=40,
+               font_size=9,
+               line_width=1,
+               edge_color='gray',
+               legend=True,
+               title="",
+               title_font_size=10,
+               figure_size=(6, 6)):
         """
         Render a networkx graph with matplotlib.
 
+        :param figure_size:
+        :param canvas:
         :param title_font_size:
         :param title:
         :param panel:
@@ -203,9 +215,20 @@ class Renderer:
         self.nx_options['edge_color'] = edge_color
         self.nx_options['width'] = line_width  # edge width
 
-        self.ax = self.canvas.axes[panel[0]-1, panel[1]-1]
-        # we clear the panel since we are drawing the whole network
-        self.ax.clear()
+        if canvas is not None:
+            self.ax = canvas.axes[panel[0] - 1, panel[1] - 1]
+            self.figure = canvas.figure
+            # we clear the panel since we are drawing the whole network
+            self.ax.clear()
+        else:
+            if self.figure is not None:
+                plt.close(self.figure)
+            self.figure, self.ax = plt.subplots(figsize=figure_size, frameon=False)
+            self.ax.axis("off")
+            self.ax.spines["top"].set_visible(False)
+            self.ax.spines["right"].set_visible(False)
+            self.ax.spines["left"].set_visible(False)
+            self.ax.spines["bottom"].set_visible(False)
 
         nx.draw_networkx(self.nxGraph, pos=self.positions, ax=self.ax, **self.nx_options)
 
@@ -412,6 +435,7 @@ class Renderer:
             fig.show(config=config)
 
 
+# to be overhauled...
 def show_ranked_complexes(snapshot, sort='size', cutoff=3, cols=3, rows=1, prog='neato'):
     """
     Display the ranked complexes of a snapshot.
