@@ -676,10 +676,10 @@ if __name__ == '__main__':
 
     # print("from Kappa:")
     # # input a simple Kappa string to create the KappaComplex representation
-    # data = ' A(o[1], p[2] t{p}[3]), B(x[1] y[2] z[.]), C(w[3], y[z.B])'
-    # c = KappaComplex(data, count=175, normalize=True)
+    data = ' A(o[1], p[2] t{p}[3]), B(x[1] y[2] z[.]), C(w[3], y[z.B])'
+    c = KappaComplex(data, count=175, normalize=True)
     # # print it
-    # print(c)
+    c.show(internal=True)
     # # short version
     # c.show()
     #

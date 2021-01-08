@@ -178,7 +178,7 @@ class Renderer:
                font_size=9,
                line_width=1,
                edge_color='gray',
-               legend=True,
+               legend=False,
                title="",
                title_font_size=10,
                figure_size=(6, 6)):

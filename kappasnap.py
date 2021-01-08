@@ -39,6 +39,8 @@ class SnapShot:
         self.event = S.event
         self.number_of_distinct_complexes = S.number_of_distinct_complexes
         self.complexes = S.complexes
+        # sort by size (large to small)
+        self.complexes = sorted(self.complexes, key=lambda c: c.size, reverse=True)
 
     def get_size_distribution(self, dictionary=False):
         """
