@@ -86,13 +86,38 @@ class Canvas:
     def clear(self, i, j):  # assuming i and j start with 1...
         self.axes[i-1, j-1].clear()
 
-    def panel2index(self, panel):  # starting with 1,1
-        return (panel[0] - 1) * self.cols + panel[1]
+    def panel2index(self, i, j):  # starting with 1,1
+        return (i - 1) * self.cols + j
 
     def index2panel(self, n):  # starting with 1
         i = -(- n // self.cols)
         j = n - self.cols * (i - 1)
         return i, j
+
+    def index2axes(self, n, on=False):
+        i, j = self.index2panel(n)
+        self.axes_visibility(i, j, on=on)
+        return self.axes[i - 1, j - 1]
+
+    def panel2axes(self, i, j, on=False):
+        self.axes_visibility(i, j, on=on)
+        return self.axes[i-1, j-1]
+
+    def axes_visibility(self, i, j, on=False):
+        i -= 1
+        j -= 1
+        if on:
+            self.axes[i, j].axis("on")
+            self.axes[i, j].spines["top"].set_visible(True)
+            self.axes[i, j].spines["right"].set_visible(True)
+            self.axes[i, j].spines["left"].set_visible(True)
+            self.axes[i, j].spines["bottom"].set_visible(True)
+        else:
+            self.axes[i, j].axis("off")
+            self.axes[i, j].spines["top"].set_visible(False)
+            self.axes[i, j].spines["right"].set_visible(False)
+            self.axes[i, j].spines["left"].set_visible(False)
+            self.axes[i, j].spines["bottom"].set_visible(False)
 
 
 class Renderer:
@@ -181,10 +206,12 @@ class Renderer:
                legend=False,
                title="",
                title_font_size=10,
+               title_color='black',
                figure_size=(6, 6)):
         """
         Render a networkx graph with matplotlib.
 
+        :param title_color:
         :param figure_size:
         :param canvas:
         :param title_font_size:
@@ -240,7 +267,7 @@ class Renderer:
             self.ax.legend(items, labels)
 
         if title:
-            self.ax.set_title(title, fontsize=title_font_size)
+            self.ax.set_title(title, fontsize=title_font_size, color=title_color)
 
     def color_edgelists(self, edge_list=[], line_width=1, edge_color='r'):
         # to unify handling, convert to a list of lists (such as coming from a cycle basis)
