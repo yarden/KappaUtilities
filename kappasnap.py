@@ -246,23 +246,24 @@ class JsonSnapShot:
 
 
 if __name__ == '__main__':
-
     import kappamorph as km
-    import kappaviz as viz
 
+    run_big_test = False
     # Yarden tests (these take 10 minutes for rigid and 43 minutes for VF2)
 
-    snap1_obj = SnapShot('TestData/snap_large.ka')
-    snap1_size = len(snap1_obj.complexes)
+    if run_big_test:
+        print("running large isomorphism test..")
+        snap1_obj = SnapShot('TestData/snap_large.ka')
+        snap1_size = len(snap1_obj.complexes)
 
-    intersection = []
-    SGM = km.SiteGraphMatcher()
-    for complex1 in snap1_obj.complexes:
-        for complex2 in snap1_obj.complexes:
-            if SGM.isomorphic(complex1, complex2):
-                intersection.append(complex1)
-                break
-    print(f'size of intersection: {len(intersection)}')
+        intersection = []
+        SGM = km.SiteGraphMatcher()
+        for complex1 in snap1_obj.complexes:
+            for complex2 in snap1_obj.complexes:
+                if SGM.isomorphic(complex1, complex2):
+                    intersection.append(complex1)
+                    break
+        print(f'size of intersection: {len(intersection)}')
 
     # intersection_vf = []
     # for complex1 in snap1_obj.complex:
@@ -298,6 +299,7 @@ if __name__ == '__main__':
     #     if i == max:
     #         break
     #
+    # import kappaviz as viz
     # # size distribution
     # dist = snapshot.get_size_distribution()
     # for item in dist:

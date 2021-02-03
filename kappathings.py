@@ -4,8 +4,6 @@ import re
 import copy
 import json
 import random
-import networkx as nx
-
 
 def is_number(s):
     try:
@@ -201,6 +199,9 @@ class KappaComplex:
         :param data: a JSON format (string or list) with schema [  list of agents  ] as defined in
                      kappasnap.KappaSnapShot
         This will not parse KaSim-supplied IDs. Use _from_kappa() for that!
+
+        YK: this function does not retrieve KaSim ID, but it also did not create
+        'sID' as field, which broke the parsing of JSON snapshots. This is corrected below.
         """
 
         def parse_link(link):
@@ -264,7 +265,9 @@ class KappaComplex:
                     state = state_[0]
                 interface[site_name] = {'state': state, 'bond': bond}
             self.agents[agent_name] = interface
-            self.info[agent_name] = {'id': identifier, 'type': agent_type, 'degree': degree}
+            self.info[agent_name] = {'id': identifier, 'type': agent_type, 'degree': degree,
+                                     # a blank sID 
+                                     'sID': "_na"}
 
     def get_structure_from_kappa(self, data):
         """
@@ -680,76 +683,76 @@ if __name__ == '__main__':
     c = KappaComplex(data, count=175, normalize=True)
     # # print it
     c.show(internal=True)
-    # # short version
-    # c.show()
+    # short version
+    c.show()
+    
+    print(f'count: {c.count}')
+    print(f'size: {c.size}')
+    print(f'sum formula: {c.sum_formula}')
+    print('')
+    
+    print("from JSON:")
+    # input a JSON string of the same complex as above
+    data = '[{"node_type":"A","node_sites":[{"site_name":"o","site_type":["port",{"port_links":[[[0,1],0]],' \
+           '"port_states":[]}]},{"site_name":"p","site_type":["port",{"port_links":[[[0,1],1]],"port_states":[]}]},' \
+           '{"site_name":"t","site_type":["port",{"port_links":[[[0,2],0]],"port_states":["p"]}]}]},' \
+           '{"node_type":"B","node_sites":[{"site_name":"x","site_type":["port",{"port_links":[[[0,0],0]],' \
+           '"port_states":[]}]},{"site_name":"y","site_type":["port",{"port_links":[[[0,0],1]],' \
+           '"port_states":[]}]},{"site_name":"z","site_type":["port",{"port_links":[],"port_states":[]}]}]},' \
+           '{"node_type":"C","node_sites":[{"site_name":"w","site_type":["port",{"port_links":[[[0,0],2]],' \
+           '"port_states":[]}]}]}]'
+    c = KappaComplex(data, normalize=True)
+    print(c)
     #
-    # print(f'count: {c.count}')
-    # print(f'size: {c.size}')
-    # print(f'sum formula: {c.sum_formula}')
-    # print('')
+    print("from file:")
+    # input a file containing one (large) Kappa string
+    line = open('TestData/bigly.ka', 'r').read()
+    # remove newlines that might occur in the file
+    line = re.sub(r'\n+', ' ', line)
+    # create a KappaComplex with whatever assignment of node identifiers arises
+    # (that's the normalize=False flag).
+    c1 = KappaComplex(line)
+    print(c1)
+    print("list of nodes:")
+    # a list of node names of the complex
+    print(c1.nodes())
+    # the complex appears as an iterable
+    print('iterating through the nodes of the complex and showing adjacency views')
+    # testing __iter__ and __getitem__ methods
+    for n in c1:
+        print(f'adjacency of {n}: {c1[n]}')
+    print('')
     #
-    # print("from JSON:")
-    # # input a JSON string of the same complex as above
-    # data = '[{"node_type":"A","node_sites":[{"site_name":"o","site_type":["port",{"port_links":[[[0,1],0]],' \
-    #        '"port_states":[]}]},{"site_name":"p","site_type":["port",{"port_links":[[[0,1],1]],"port_states":[]}]},' \
-    #        '{"site_name":"t","site_type":["port",{"port_links":[[[0,2],0]],"port_states":["p"]}]}]},' \
-    #        '{"node_type":"B","node_sites":[{"site_name":"x","site_type":["port",{"port_links":[[[0,0],0]],' \
-    #        '"port_states":[]}]},{"site_name":"y","site_type":["port",{"port_links":[[[0,0],1]],' \
-    #        '"port_states":[]}]},{"site_name":"z","site_type":["port",{"port_links":[],"port_states":[]}]}]},' \
-    #        '{"node_type":"C","node_sites":[{"site_name":"w","site_type":["port",{"port_links":[[[0,0],2]],' \
-    #        '"port_states":[]}]}]}]'
-    # c = KappaComplex(data, normalize=True)
-    # print(c)
-    # #
-    # print("from file:")
-    # # input a file containing one (large) Kappa string
-    # line = open('TestData/bigly.ka', 'r').read()
-    # # remove newlines that might occur in the file
-    # line = re.sub(r'\n+', ' ', line)
-    # # create a KappaComplex with whatever assignment of node identifiers arises
-    # # (that's the normalize=False flag).
-    # c1 = KappaComplex(line)
-    # print(c1)
-    # print("list of nodes:")
-    # # a list of node names of the complex
-    # print(c1.nodes())
-    # # the complex appears as an iterable
-    # print('iterating through the nodes of the complex and showing adjacency views')
-    # # testing __iter__ and __getitem__ methods
-    # for n in c1:
-    #     print(f'adjacency of {n}: {c1[n]}')
-    # print('')
-    # #
-    # print("normalize identifiers:")
-    # # "normalize" the identifiers, which means: when node types are sorted lexicographically,
-    # # nodes are assigned successively increasing identifiers.
-    # c2 = KappaComplex(line, normalize=True)
-    # print(c2)
-    #
-    # print("randomly permute identifiers:")
-    # # assign identifiers randomly; this is useful for testing the isomorphism implementation
-    # c3 = KappaComplex(line, randomize=True)
-    # print(c3)
-    #
-    # print("list of nodes:")
-    # # a list of node names of the complex
-    # print(c3.nodes())
-    # # the complex appears as an iterable
-    # print('iterating through the nodes of the complex and showing adjacency views')
-    # # testing __iter__ and __getitem__ methods
-    # for n in c3:
-    #     print(f'adjacency of {n}: {c3[n]}')
-    # print('')
-    # print(c3.sum_formula)
-    # print(c3.type_slice)
-    # for a_type in c3.type_slice.keys():
-    #     (start, stop) = c3.type_slice[a_type]
-    #     print(c3.name_list[start:stop])
+    print("normalize identifiers:")
+    # "normalize" the identifiers, which means: when node types are sorted lexicographically,
+    # nodes are assigned successively increasing identifiers.
+    c2 = KappaComplex(line, normalize=True)
+    print(c2)
+    
+    print("randomly permute identifiers:")
+    # assign identifiers randomly; this is useful for testing the isomorphism implementation
+    c3 = KappaComplex(line, randomize=True)
+    print(c3)
+    
+    print("list of nodes:")
+    # a list of node names of the complex
+    print(c3.nodes())
+    # the complex appears as an iterable
+    print('iterating through the nodes of the complex and showing adjacency views')
+    # testing __iter__ and __getitem__ methods
+    for n in c3:
+        print(f'adjacency of {n}: {c3[n]}')
+    print('')
+    print(c3.sum_formula)
+    print(c3.type_slice)
+    for a_type in c3.type_slice.keys():
+        (start, stop) = c3.type_slice[a_type]
+        print(c3.name_list[start:stop])
 
-    # print("big stuff from file:")
-    # line = open('TestData/monster.ka', 'r').read()
-    # line = re.sub(r'\n+', ' ', line)
-    # start = time.process_time()
-    # c1 = KappaComplex(line)
-    # end = time.process_time()
-    # print(f'seconds: {end - start}')
+    print("big stuff from file:")
+    line = open('TestData/monster.ka', 'r').read()
+    line = re.sub(r'\n+', ' ', line)
+    start = time.process_time()
+    c1 = KappaComplex(line)
+    end = time.process_time()
+    print(f'seconds: {end - start}')
