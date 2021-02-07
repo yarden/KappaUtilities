@@ -2,12 +2,13 @@
 
 import kappathings as kt
 # import kappy
+import time
 import re
 import gzip
 import json
 import os
 import sys
-
+from collections import defaultdict
 
 class SnapShot:
     """
@@ -22,24 +23,31 @@ class SnapShot:
             print(c)
     """
 
-    def __init__(self, file, use_kappy=False):
+    def __init__(self, file, use_kappy=False, build_index=False):
         self.file = file
         self.time = 0.
         self.event = 0
         self.number_of_distinct_complexes = 0
         self.complexes = []  # list of 'KappaComplex'es
+        self.build_index = build_index
+
+        # internal snapshot store 
+        self.snap_store = None
 
         if self.file.endswith(".json") or self.file.endswith(".json.gz"):
-            S = JsonSnapShot(file, use_kappy=use_kappy)
+            if build_index:
+                raise Exception("Building of index not yet implemented for JSON.")
+            self.snap_store = JsonSnapShot(file, use_kappy=use_kappy)
         elif self.file.endswith(".ka"):
-            S = KappaSnapShot(file, use_kappy=use_kappy)
+            self.snap_store = KappaSnapShot(file, use_kappy=use_kappy, build_index=build_index)
         else:
             raise Exception("Unknown file extension %s" % self.file)
-        self.time = S.time
-        self.event = S.event
-        self.number_of_distinct_complexes = S.number_of_distinct_complexes
-        self.complexes = S.complexes
+        self.time = self.snap_store.time
+        self.event = self.snap_store.event
+        self.number_of_distinct_complexes = self.snap_store.number_of_distinct_complexes
+        self.complexes = self.snap_store.complexes
         # sort by size (large to small)
+        # (YK: sorted makes a copy; this is potentially expensive).
         self.complexes = sorted(self.complexes, key=lambda c: c.size, reverse=True)
 
     def get_size_distribution(self, dictionary=False):
@@ -65,12 +73,32 @@ class SnapShot:
         else:
             return [(l, c) for l, c in sorted(length.items(), key=lambda i: i[0], reverse=False)]
 
+    def intersect(self, snap_obj):
+        """
+        Intersect current snapshot with another snapshot. This makes use 
+        of an internal index mapping a sum formula to the complexes with that
+        sum formula. When taking the intersection, one only needs to compare
+        each complex in one snapshot to the complexes with the same sum formulae
+        in the other snapshot.
+        """
+        if not snap_obj.build_index:
+            raise Exception("No prebuilt snapshot index available. Did you forget " \
+                            "to use build_index=True when loading your snapshot?")
+        intersection = []
+        sgm = km.SiteGraphMatcher()
+        for curr_comp in snap_obj.complexes:
+            for other_comp in snap_obj.snap_store.sum_to_complexes[curr_comp.sum_formula]:
+                if sgm.isomorphic(curr_comp, other_comp):
+                    intersection.append(other_comp)
+                    break
+        return intersection
 
 class KappaSnapShot:
-    def __init__(self, kappa_file, use_kappy):
+    def __init__(self, kappa_file, use_kappy, build_index=False):
         # aux vars
         self.data = None
         self.use_kappy = use_kappy
+        self.build_index = build_index
         self.current_line = ''
 
         self.kappa_file = kappa_file
@@ -78,6 +106,8 @@ class KappaSnapShot:
         self.event = 0
         self.number_of_distinct_complexes = 0
         self.complexes = []  # list of 'KappaComplex'es
+        # mapping from sum formula to complexes
+        self.sum_to_complexes = defaultdict(list)
 
         self.load_and_unpack()
         self.data = None  # clear
@@ -112,6 +142,8 @@ class KappaSnapShot:
                         match = re.findall(r'%init: (.*?) \/\*(.*?) agents\*\/ (.*?)$', entry)[0]
                         # build the internal representation
                         komplex = kt.KappaComplex(match[2].strip(), count=int(match[0]))
+                    if self.build_index:
+                        self.sum_to_complexes[komplex.sum_formula].append(komplex)
                     self.complexes.append(komplex)
             self.number_of_distinct_complexes = len(self.complexes)
 
@@ -248,21 +280,38 @@ class JsonSnapShot:
 if __name__ == '__main__':
     import kappamorph as km
 
-    run_big_test = False
+    run_big_test = True#False
     # Yarden tests (these take 10 minutes for rigid and 43 minutes for VF2)
 
     if run_big_test:
-        print("running large isomorphism test..")
-        snap1_obj = SnapShot('TestData/snap_large.ka')
+        print("running large isomorphism tests..")
+        print("loading snapshot")
+        t1 = time.time()
+        snap1_obj = SnapShot('TestData/snap_large.ka', build_index=True)
+        t2 = time.time()
+        print("  - loading took %.1f secs" %(t2 - t1))
         snap1_size = len(snap1_obj.complexes)
+        print("snapshot-level intersection")
+        intersection = []
+        t1 = time.time()
+        # intersect with itself
+        intersection = snap1_obj.intersect(snap1_obj)
+        t2 = time.time()
+        print("  - took %.1f secs" %(t2 - t1))
+        print(f'size of intersection: {len(intersection)}')
+        print("naive intersection (iteration by complex)")
+        print("running large isomorphism test..")
 
         intersection = []
+        t1 = time.time()
         SGM = km.SiteGraphMatcher()
         for complex1 in snap1_obj.complexes:
             for complex2 in snap1_obj.complexes:
                 if SGM.isomorphic(complex1, complex2):
                     intersection.append(complex1)
                     break
+        t2 = time.time()
+        print("  - took %.1f secs" %(t2 - t1))
         print(f'size of intersection: {len(intersection)}')
 
     # intersection_vf = []
